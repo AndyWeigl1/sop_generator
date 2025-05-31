@@ -2,7 +2,7 @@
 import customtkinter as ctk
 from typing import Dict, Optional, Any, Tuple
 from modules.base_module import Module
-from modules.complex_modules import TabModule
+from modules.complex_module import TabModule
 from tkinter import filedialog
 
 
