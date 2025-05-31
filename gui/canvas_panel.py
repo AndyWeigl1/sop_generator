@@ -2,7 +2,7 @@
 import customtkinter as ctk
 from typing import Dict, Optional, Tuple
 from modules.base_module import Module
-from modules.complex_modules import TabModule
+from modules.complex_module import TabModule
 
 class CanvasPanel:
     """Central panel for arranging modules"""
