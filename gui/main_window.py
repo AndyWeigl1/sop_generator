@@ -30,6 +30,16 @@ class MainWindow:
         self.new_btn = ctk.CTkButton(self.menu_frame, text="New", width=80)
         self.new_btn.pack(side="left", padx=5, pady=5)
 
+        # Add Blank Project button
+        self.blank_btn = ctk.CTkButton(
+            self.menu_frame,
+            text="Blank",
+            width=80,
+            fg_color="gray40",
+            hover_color="gray50"
+        )
+        self.blank_btn.pack(side="left", padx=2)
+
         self.open_btn = ctk.CTkButton(self.menu_frame, text="Open", width=80)
         self.open_btn.pack(side="left", padx=5)
 
