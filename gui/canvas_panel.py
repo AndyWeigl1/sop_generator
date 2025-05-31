@@ -1,8 +1,8 @@
 # gui/canvas_panel.py
 import customtkinter as ctk
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 from modules.base_module import Module
-
+from modules.complex_modules import TabModule
 
 class CanvasPanel:
     """Central panel for arranging modules"""
@@ -11,6 +11,7 @@ class CanvasPanel:
         self.parent = parent
         self.app = app_instance
         self.module_widgets: Dict[str, ctk.CTkFrame] = {}
+        self.tab_widgets: Dict[str, Dict[str, ctk.CTkFrame]] = {} # tab_module_id -> {tab_name -> frame}
         self.selected_widget: Optional[ctk.CTkFrame] = None
         self.preview_mode = False
 
@@ -25,21 +26,169 @@ class CanvasPanel:
         )
         self.modules_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-    def add_module_widget(self, module: Module):
+    def add_module_widget(self, module: Module, with_nested: bool = False):
         """Add visual representation of module"""
-        # Create a frame for the module
-        module_frame = ctk.CTkFrame(
-            self.modules_frame,
-            fg_color="gray15",
-            border_width=2,
-            border_color=("gray15", "gray15")  # Changed from "transparent"
-        )
+        # Create main module frame
+        module_frame = self._create_module_frame(module, is_top_level=True)
         module_frame.pack(fill="x", padx=5, pady=5)
+
+        # Store reference
+        self.module_widgets[module.id] = module_frame
+
+        # If it's a TabModule, create tab content areas
+        if isinstance(module, TabModule):
+            self._create_tab_content_areas(module, module_frame, with_nested)
+
+        # Make frame clickable
+        self._bind_module_events(module_frame, module)
+
+
+    def _create_tab_content_areas(self, tab_module: TabModule, parent_frame: ctk.CTkFrame,
+                                with_nested: bool = False):
+        """Create visual areas for tab content"""
+        # Create a frame for tab contents
+        tab_container = ctk.CTkFrame(parent_frame, fg_color="gray20")
+        tab_container.pack(fill="both", expand=True, padx=5, pady=(0, 5))
+
+        # Initialize storage for this tab module
+        if tab_module.id not in self.tab_widgets:
+            self.tab_widgets[tab_module.id] = {}
+
+        # Create tab selector
+        tab_selector_frame = ctk.CTkFrame(tab_container, fg_color="gray25", height=35)
+        tab_selector_frame.pack(fill="x", padx=2, pady=2)
+        tab_selector_frame.pack_propagate(False)
+
+        # Tab buttons
+        for i, tab_name in enumerate(tab_module.content_data['tabs']):
+            tab_btn = ctk.CTkButton(
+                tab_selector_frame,
+                text=tab_name,
+                width=100,
+                height=25,
+                fg_color="gray30" if i == tab_module.content_data['active_tab'] else "gray40",
+                command=lambda tn=tab_name, tm=tab_module: self._on_tab_click(tm, tn)
+            )
+            tab_btn.pack(side="left", padx=2, pady=4)
+
+        # Add "+" button to add new tab
+        add_tab_btn = ctk.CTkButton(
+            tab_selector_frame,
+            text="+",
+            width=30,
+            height=25,
+            command=lambda: self._add_new_tab(tab_module)
+        )
+        add_tab_btn.pack(side="left", padx=2)
+
+
+        # Create content frame for active tab
+        active_tab_index = tab_module.content_data['active_tab']
+        if 0 <= active_tab_index < len(tab_module.content_data['tabs']):
+            active_tab = tab_module.content_data['tabs'][active_tab_index]
+        else:
+            # Handle cases where active_tab_index might be out of bounds
+            # or if tabs list is empty. Default to first tab or handle error.
+            if tab_module.content_data['tabs']:
+                active_tab = tab_module.content_data['tabs'][0]
+                tab_module.content_data['active_tab'] = 0
+            else:
+                # No tabs exist, cannot create content frame for active tab yet
+                return
+
+
+        content_frame = ctk.CTkFrame(tab_container, fg_color="gray15")
+        content_frame.pack(fill="both", expand=True, padx=5, pady=5)
+
+        # Create drop zone for adding modules to this tab
+        drop_zone = ctk.CTkFrame(content_frame, fg_color="gray18", height=40)
+        drop_zone.pack(fill="x", padx=5, pady=5)
+
+        drop_label = ctk.CTkLabel(
+            drop_zone,
+            text=f"+ Add modules to '{active_tab}' tab",
+            text_color="gray",
+            cursor="hand2"
+        )
+        drop_label.pack(pady=10)
+
+        # Make drop zone clickable
+        drop_zone.bind("<Button-1>", lambda e, tm=tab_module, at=active_tab: self._on_tab_dropzone_click(tm, at))
+        drop_label.bind("<Button-1>", lambda e, tm=tab_module, at=active_tab: self._on_tab_dropzone_click(tm, at))
+
+
+        # Container for modules in this tab
+        modules_container = ctk.CTkFrame(content_frame, fg_color="gray15")
+        modules_container.pack(fill="both", expand=True, padx=5)
+
+        # Store the content frame
+        self.tab_widgets[tab_module.id][active_tab] = modules_container
+
+        # If loading from file, add existing nested modules
+        if with_nested and active_tab in tab_module.sub_modules:
+            for nested_module in sorted(tab_module.sub_modules[active_tab], key=lambda m: m.position):
+                self.add_module_to_tab_widget(tab_module, active_tab, nested_module)
+
+    def add_module_to_tab_widget(self, tab_module: TabModule, tab_name: str, module: Module):
+        """Add a module widget to a specific tab"""
+        if tab_module.id not in self.tab_widgets:
+            return
+
+        # Get or create the container for this tab
+        if tab_name not in self.tab_widgets[tab_module.id]:
+            # Tab doesn't have a visual container yet, create it
+            self._switch_active_tab(tab_module, tab_name)  # This needs to ensure the container is made
+
+        container = self.tab_widgets[tab_module.id].get(tab_name)
+        if not container:
+            # If _switch_active_tab doesn't create it or it's still missing
+            print(f"Error: Container for tab '{tab_name}' not found after attempting to switch/create.")
+            return
+
+        # Create module frame
+        module_frame = self._create_module_frame(module, is_top_level=False, parent_tab=(tab_module, tab_name))
+        module_frame.pack(fill="x", padx=5, pady=5)
+
+        # Store reference (with tab context in the key)
+        widget_key = f"{tab_module.id}:{tab_name}:{module.id}"
+        self.module_widgets[widget_key] = module_frame
+
+        # Bind events
+        self._bind_module_events(module_frame, module, parent_tab=(tab_module, tab_name))
+
+    def _create_module_frame(self, module: Module, is_top_level: bool = True,
+                             parent_tab: Optional[Tuple[TabModule, str]] = None) -> ctk.CTkFrame:
+        """Create a frame for a module"""
+        # Use different styling for nested modules
+        frame_color = "gray15" if is_top_level else "gray18"
+        border_color = "gray15" if is_top_level else "gray20"
+
+        parent_widget = self.modules_frame
+        if not is_top_level and parent_tab:
+            tab_module_id, tab_name = parent_tab[0].id, parent_tab[1]
+            if tab_module_id in self.tab_widgets and tab_name in self.tab_widgets[tab_module_id]:
+                parent_widget = self.tab_widgets[tab_module_id][tab_name]
+            else:
+                # Fallback or error: parent container for tab not found
+                print(f"Error: Parent container for tab {tab_name} of module {tab_module_id} not found.")
+                parent_widget = self.modules_frame  # Fallback to main canvas, though likely not desired
+
+        module_frame = ctk.CTkFrame(
+            parent_widget,
+            fg_color=frame_color,
+            border_width=2,
+            border_color=border_color
+        )
 
         # Create header with module type and controls
         header_frame = ctk.CTkFrame(module_frame, fg_color="gray20", height=30)
         header_frame.pack(fill="x", padx=2, pady=2)
         header_frame.pack_propagate(False)
+
+        # Add indentation for nested modules
+        if not is_top_level:
+            indent_label = ctk.CTkLabel(header_frame, text=" →", text_color="gray")
+            indent_label.pack(side="left", padx=(5, 0))
 
         # Module type label
         type_label = ctk.CTkLabel(
@@ -50,16 +199,30 @@ class CanvasPanel:
         type_label.pack(side="left", padx=10)
 
         # Control buttons
-        controls_frame = ctk.CTkFrame(header_frame, fg_color="gray20")  # Changed from "transparent"
+        controls_frame = ctk.CTkFrame(header_frame, fg_color="gray20")
         controls_frame.pack(side="right", padx=5)
 
+        # Context-specific controls
+        if not is_top_level and parent_tab:
+            # For modules in tabs: add "move to main" button
+            move_out_btn = ctk.CTkButton(
+                controls_frame,
+                text="↗",
+                width=25,
+                height=25,
+                command=lambda m=module, pt0=parent_tab[0], pt1=parent_tab[1]: self.app.move_module_from_tab(m, pt0,
+                                                                                                             pt1)
+            )
+            move_out_btn.pack(side="left", padx=2)
+
+        # Standard controls
         # Move up button
         up_btn = ctk.CTkButton(
             controls_frame,
             text="↑",
             width=25,
             height=25,
-            command=lambda: self._move_module(module.id, -1)
+            command=lambda m=module, pt=parent_tab: self._move_module(m, -1, pt)
         )
         up_btn.pack(side="left", padx=2)
 
@@ -69,7 +232,7 @@ class CanvasPanel:
             text="↓",
             width=25,
             height=25,
-            command=lambda: self._move_module(module.id, 1)
+            command=lambda m=module, pt=parent_tab: self._move_module(m, 1, pt)
         )
         down_btn.pack(side="left", padx=2)
 
@@ -81,7 +244,7 @@ class CanvasPanel:
             height=25,
             fg_color="darkred",
             hover_color="red",
-            command=lambda: self.app.remove_module(module.id)
+            command=lambda mid=module.id: self.app.remove_module(mid)
         )
         delete_btn.pack(side="left", padx=2)
 
@@ -92,15 +255,7 @@ class CanvasPanel:
         # Add module preview content
         self._create_module_preview(preview_frame, module)
 
-        # Store reference
-        self.module_widgets[module.id] = module_frame
-
-        # Make frame clickable
-        module_frame.bind("<Button-1>", lambda e: self.app.select_module(module))
-        preview_frame.bind("<Button-1>", lambda e: self.app.select_module(module))
-
-        # Enable drag functionality
-        self._enable_drag(module_frame, module)
+        return module_frame
 
     def _create_module_preview(self, parent: ctk.CTkFrame, module: Module):
         """Create preview of module content"""
@@ -116,6 +271,192 @@ class CanvasPanel:
             wraplength=400
         )
         preview_label.pack(fill="both", expand=True, padx=10, pady=10)
+
+    def _on_tab_click(self, tab_module: TabModule, tab_name: str):
+        """Handle tab selection"""
+        # Update the active tab in the module
+        if tab_name in tab_module.content_data['tabs']:
+            tab_module.content_data['active_tab'] = tab_module.content_data['tabs'].index(tab_name)
+            # self.app.select_tab(tab_module, tab_name) # Assuming app has such a method
+            self._switch_active_tab(tab_module, tab_name)
+            self.app.set_modified(True)  # Assuming app has such a method
+
+    def _switch_active_tab(self, tab_module: TabModule, tab_name: str):
+        """Switch the visible tab content"""
+        # This would update the visual display to show the selected tab's content
+        # For simplicity, we'll just update the drop zone label
+        # In a full implementation, you'd hide/show different content containers
+
+        # Find the parent_frame of the tab_module (its main widget)
+        if tab_module.id not in self.module_widgets:
+            return
+        tab_module_main_frame = self.module_widgets[tab_module.id]
+
+        # Find tab_container within tab_module_main_frame
+        # This assumes a certain structure created in _create_tab_content_areas
+        tab_container = None
+        for child in tab_module_main_frame.winfo_children():
+            if isinstance(child, ctk.CTkFrame) and child.cget("fg_color") == "gray20":  # Heuristic
+                tab_container = child
+                break
+        if not tab_container: return
+
+        # Destroy existing content_frame (the one with fg_color="gray15")
+        for widget in tab_container.winfo_children():
+            # Avoid destroying the tab_selector_frame
+            if widget.cget("fg_color") == "gray15":  # Heuristic for content_frame
+                widget.destroy()
+
+        # Recreate tab buttons to update their colors
+        tab_selector_frame = None
+        for child in tab_container.winfo_children():
+            if isinstance(child, ctk.CTkFrame) and child.cget("fg_color") == "gray25":
+                tab_selector_frame = child
+                break
+
+        if tab_selector_frame:
+            for widget in tab_selector_frame.winfo_children():
+                widget.destroy()  # Clear old buttons
+
+            for i, tn in enumerate(tab_module.content_data['tabs']):
+                is_active = (tn == tab_name)
+                tab_btn = ctk.CTkButton(
+                    tab_selector_frame,
+                    text=tn,
+                    width=100,
+                    height=25,
+                    fg_color="gray30" if is_active else "gray40",
+                    command=lambda t_name=tn, tm=tab_module: self._on_tab_click(tm, t_name)
+                )
+                tab_btn.pack(side="left", padx=2, pady=4)
+
+            add_tab_btn = ctk.CTkButton(
+                tab_selector_frame,
+                text="+",
+                width=30,
+                height=25,
+                command=lambda tm=tab_module: self._add_new_tab(tm)
+            )
+            add_tab_btn.pack(side="left", padx=2)
+
+        # Create new content frame for the selected tab
+        content_frame = ctk.CTkFrame(tab_container, fg_color="gray15")
+        content_frame.pack(fill="both", expand=True, padx=5, pady=5)
+
+        # Create drop zone
+        drop_zone = ctk.CTkFrame(content_frame, fg_color="gray18", height=40)
+        drop_zone.pack(fill="x", padx=5, pady=5)
+        drop_label = ctk.CTkLabel(
+            drop_zone,
+            text=f"+ Add modules to '{tab_name}' tab",
+            text_color="gray",
+            cursor="hand2"
+        )
+        drop_label.pack(pady=10)
+        drop_zone.bind("<Button-1>", lambda e, tm=tab_module, tn=tab_name: self._on_tab_dropzone_click(tm, tn))
+        drop_label.bind("<Button-1>", lambda e, tm=tab_module, tn=tab_name: self._on_tab_dropzone_click(tm, tn))
+
+        # Container for modules in this tab
+        modules_container = ctk.CTkFrame(content_frame, fg_color="gray15")
+        modules_container.pack(fill="both", expand=True, padx=5)
+
+        # Store the new content frame
+        self.tab_widgets[tab_module.id][tab_name] = modules_container
+
+        # Re-add modules for this tab
+        if tab_name in tab_module.sub_modules:
+            for nested_module in sorted(tab_module.sub_modules[tab_name], key=lambda m: m.position):
+                self.add_module_to_tab_widget(tab_module, tab_name, nested_module)
+
+    def _add_new_tab(self, tab_module: TabModule):
+        """Add a new tab to the TabModule"""
+        # Simple dialog to get tab name
+        dialog = ctk.CTkInputDialog(text="Enter tab name:", title="New Tab")
+        tab_name = dialog.get_input()
+
+        if tab_name and tab_name not in tab_module.content_data['tabs']:
+            tab_module.add_tab(tab_name) # Assuming TabModule has this method
+            # Refresh the tab module widget
+            self._refresh_tab_module(tab_module)
+            self.app.set_modified(True) # Assuming app has such a method
+
+    def _bind_module_events(self, frame: ctk.CTkFrame, module: Module,
+                            parent_tab: Optional[Tuple[TabModule, str]] = None):
+        """Bind click events to module frame"""
+        # Capture current values for lambda
+        current_module = module
+        current_parent_tab = parent_tab
+
+        frame.bind("<Button-1>", lambda e: self.app.select_module(current_module, current_parent_tab))
+        for child in frame.winfo_children():
+            # Only bind to direct children that are frames, avoid binding to all sub-widgets like buttons
+            if isinstance(child, ctk.CTkFrame):
+                child.bind("<Button-1>", lambda e: self.app.select_module(current_module, current_parent_tab))
+            # Deeper binding might be needed if clicks on labels etc. should also select
+            # but be careful not to override other specific bindings (like on buttons)
+
+    def _refresh_tab_module(self, tab_module: TabModule):
+        """Refresh the entire tab module widget"""
+        # Remove and recreate the widget
+        if tab_module.id in self.module_widgets:
+            self.module_widgets[tab_module.id].destroy()
+            del self.module_widgets[tab_module.id]
+
+        # Clean up tab widgets associated with this module
+        if tab_module.id in self.tab_widgets:
+            for tab_name_key in list(self.tab_widgets[tab_module.id].keys()): # Iterate over a copy of keys
+                # Destroy widgets within each tab's container
+                tab_container = self.tab_widgets[tab_module.id][tab_name_key]
+                if tab_container: # Check if it's not None
+                    for widget in tab_container.winfo_children():
+                        widget.destroy()
+                    tab_container.destroy() # Destroy the container itself
+                # Remove the key from tab_widgets for this specific tab_module
+                del self.tab_widgets[tab_module.id][tab_name_key]
+            # After all tab containers for this module are cleared and destroyed
+            del self.tab_widgets[tab_module.id]
+        # Recreate
+        self.add_module_widget(tab_module, with_nested=True)
+
+    def _refresh_tab_content(self, tab_module: TabModule, tab_name: str):
+        """Refresh the content of a specific tab"""
+        if tab_module.id in self.tab_widgets and tab_name in self.tab_widgets[tab_module.id]:
+            container = self.tab_widgets[tab_module.id][tab_name]
+
+            # Clear existing widgets in the container
+            for widget in container.winfo_children():
+                widget.destroy()
+
+            # Re-add modules in correct order
+            if tab_name in tab_module.sub_modules:
+                for module in sorted(tab_module.sub_modules.get(tab_name, []), key=lambda m: m.position):
+                    self.add_module_to_tab_widget(tab_module, tab_name, module)
+
+    def remove_module_from_tab_widget(self, tab_module: TabModule, tab_name: str, module_id: str):
+        """Remove a module widget from a tab"""
+        widget_key = f"{tab_module.id}:{tab_name}:{module_id}"
+        if widget_key in self.module_widgets:
+            self.module_widgets[widget_key].destroy()
+            del self.module_widgets[widget_key]
+            # Also remove from the TabModule's internal list of sub_modules
+            # tab_module.remove_sub_module(tab_name, module_id) # Assuming such a method exists
+            # self.app.set_modified(True)
+
+    def highlight_tab(self, tab_module: TabModule, tab_name: str):
+        """Highlight a selected tab"""
+        # Update visual indication of selected tab
+        if tab_module.id in self.module_widgets:
+            # self.highlight_module(tab_module) # Assuming this method exists and highlights the main module frame
+            pass # Main module frame highlighting might be handled by select_module
+        # Additional tab-specific highlighting could be added here
+        # e.g., changing the style of the tab button itself via _switch_active_tab or similar logic
+
+    def _on_tab_dropzone_click(self, tab_module: TabModule, tab_name: str):
+        """Handle click on tab drop zone to add modules"""
+        # self.app.select_tab(tab_module, tab_name) # Assuming app has such a method
+        print(f"Dropzone clicked for tab: {tab_name} in module: {tab_module.id}")
+        # Here you would typically open a dialog or module selection menu
+        # and then call self.app.add_module_to_tab(tab_module, tab_name, selected_new_module)
 
     def _get_preview_text(self, module: Module) -> str:
         """Get preview text for module"""
@@ -248,3 +589,5 @@ class CanvasPanel:
             # Calculate new position based on mouse position
             # This is a simplified version - you can enhance it
             del self.drag_data
+
+
