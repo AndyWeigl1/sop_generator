@@ -144,7 +144,7 @@ class SOPBuilderApp:
     def select_tab(self, tab_module: TabModule, tab_name: str):
         """Select a specific tab within a TabModule"""
         self.selected_tab_context = (tab_module, tab_name)
-        self.selected_module = None # Clear module selection
+        self.selected_module = None
         self.properties_panel.show_tab_properties(tab_module, tab_name)
         self.canvas_panel.highlight_tab(tab_module, tab_name)
 
@@ -195,7 +195,7 @@ class SOPBuilderApp:
             self.canvas_panel.remove_module_widget(module.id)
 
             # Add to tab
-            if target_tab.add_module_to_tab(tab_name, module):  # Assuming TabModule.add_module_to_tab
+            if target_tab.add_module_to_tab(tab_name, module):
                 self.canvas_panel.add_module_to_tab_widget(target_tab, tab_name, module)
                 self._update_module_positions()
                 self.set_modified(True)
@@ -204,7 +204,7 @@ class SOPBuilderApp:
 
     def move_module_from_tab(self, module: Module, source_tab: TabModule, tab_name: str):
         """Move a module from a tab to the main canvas"""
-        removed_module = source_tab.remove_module_from_tab(tab_name, module.id) # Assuming TabModule.remove_module_from_tab
+        removed_module = source_tab.remove_module_from_tab(tab_name, module.id)
         if removed_module:
             self.canvas_panel.remove_module_from_tab_widget(source_tab, tab_name, module.id)
 
@@ -230,22 +230,19 @@ class SOPBuilderApp:
     def find_module_by_id(self, module_id: str) -> Optional[Tuple[Module, Optional[Tuple[TabModule, str]]]]:
         """Find a module by ID and return it with its parent context if in a tab"""
         # Check main canvas
-        for module_iter in self.active_modules: # Changed variable name
+        for module_iter in self.active_modules:
             if module_iter.id == module_id:
                 return (module_iter, None)
 
             # Check within tabs
             if isinstance(module_iter, TabModule):
-                tab_name = module_iter.find_module_tab(module_id) # Assuming TabModule.find_module_tab
+                tab_name = module_iter.find_module_tab(module_id)
                 if tab_name:
-                    # Ensure sub_modules is accessible and is a dict as expected
-                    if hasattr(module_iter, 'sub_modules') and isinstance(module_iter.sub_modules, dict):
-                        for sub_module in module_iter.sub_modules.get(tab_name, []):
+                    # Find the actual module in the tab
+                    if tab_name in module_iter.sub_modules:
+                        for sub_module in module_iter.sub_modules[tab_name]:
                             if sub_module.id == module_id:
                                 return (sub_module, (module_iter, tab_name))
-                    else: # Fallback or error if sub_modules structure is not as expected
-                        # This part depends on how TabModule stores its sub_modules
-                        pass
         return None
 
     def reorder_modules(self, module_id: str, new_position: int):
@@ -442,7 +439,11 @@ class SOPBuilderApp:
     def update_module_property(self, module: Module, property_name: str, value: any):
         """Update a module property"""
         module.update_content(property_name, value)
+        # Update canvas preview
         self.canvas_panel.update_module_preview(module)
+        # If it's a TabModule and we're updating tabs, refresh the tab UI
+        if isinstance(module, TabModule) and property_name == 'tabs':
+            self.canvas_panel._refresh_tab_module(module)
         self.set_modified(True)
 
     def run(self):
