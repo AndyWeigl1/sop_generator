@@ -169,9 +169,8 @@ class CanvasPanel:
             if tab_module_id in self.tab_widgets and tab_name in self.tab_widgets[tab_module_id]:
                 parent_widget = self.tab_widgets[tab_module_id][tab_name]
             else:
-                # Fallback or error: parent container for tab not found
                 print(f"Error: Parent container for tab {tab_name} of module {tab_module_id} not found.")
-                parent_widget = self.modules_frame  # Fallback to main canvas, though likely not desired
+                parent_widget = self.modules_frame
 
         module_frame = ctk.CTkFrame(
             parent_widget,
@@ -216,23 +215,23 @@ class CanvasPanel:
             move_out_btn.pack(side="left", padx=2)
 
         # Standard controls
-        # Move up button
+        # Move up button - FIXED: pass module.id and handle parent_tab context properly
         up_btn = ctk.CTkButton(
             controls_frame,
             text="↑",
             width=25,
             height=25,
-            command=lambda m=module, pt=parent_tab: self._move_module(m, -1, pt)
+            command=lambda: self._move_module_up(module, parent_tab)
         )
         up_btn.pack(side="left", padx=2)
 
-        # Move down button
+        # Move down button - FIXED: pass module.id and handle parent_tab context properly
         down_btn = ctk.CTkButton(
             controls_frame,
             text="↓",
             width=25,
             height=25,
-            command=lambda m=module, pt=parent_tab: self._move_module(m, 1, pt)
+            command=lambda: self._move_module_down(module, parent_tab)
         )
         down_btn.pack(side="left", padx=2)
 
@@ -256,6 +255,48 @@ class CanvasPanel:
         self._create_module_preview(preview_frame, module)
 
         return module_frame
+
+    def _move_module_up(self, module: Module, parent_tab: Optional[Tuple[TabModule, str]] = None):
+        """Move module up in its context (main canvas or within a tab)"""
+        if parent_tab:
+            # Module is in a tab - move within that tab
+            tab_module, tab_name = parent_tab
+            if tab_name in tab_module.sub_modules:
+                modules = tab_module.sub_modules[tab_name]
+                current_index = None
+                for i, m in enumerate(modules):
+                    if m.id == module.id:
+                        current_index = i
+                        break
+
+                if current_index is not None and current_index > 0:
+                    tab_module.reorder_module_in_tab(tab_name, module.id, current_index - 1)
+                    self._refresh_tab_content(tab_module, tab_name)
+                    self.app.set_modified(True)
+        else:
+            # Module is on main canvas
+            self._move_module(module.id, -1)
+
+    def _move_module_down(self, module: Module, parent_tab: Optional[Tuple[TabModule, str]] = None):
+        """Move module down in its context (main canvas or within a tab)"""
+        if parent_tab:
+            # Module is in a tab - move within that tab
+            tab_module, tab_name = parent_tab
+            if tab_name in tab_module.sub_modules:
+                modules = tab_module.sub_modules[tab_name]
+                current_index = None
+                for i, m in enumerate(modules):
+                    if m.id == module.id:
+                        current_index = i
+                        break
+
+                if current_index is not None and current_index < len(modules) - 1:
+                    tab_module.reorder_module_in_tab(tab_name, module.id, current_index + 1)
+                    self._refresh_tab_content(tab_module, tab_name)
+                    self.app.set_modified(True)
+        else:
+            # Module is on main canvas
+            self._move_module(module.id, 1)
 
     def _create_module_preview(self, parent: ctk.CTkFrame, module: Module):
         """Create preview of module content"""
@@ -551,7 +592,7 @@ class CanvasPanel:
                 self.refresh_order()
 
     def _move_module(self, module_id: str, direction: int):
-        """Move module up or down"""
+        """Move module up or down on main canvas"""
         # Find module position
         module_index = None
         for i, module in enumerate(self.app.active_modules):
