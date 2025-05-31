@@ -1,48 +1,78 @@
 # utils/html_generator.py
-from typing import List
+from typing import List, Dict, Optional
 from modules.base_module import Module
 import base64
 from pathlib import Path
+import shutil
 
 
 class HTMLGenerator:
-    """Generate HTML from arranged modules"""
+    """Generate HTML from arranged modules with theme support"""
 
     def __init__(self):
+        self.theme_name = "kodiak"  # Default theme
+        self.themes_dir = Path("assets/themes")
         self.base_template = self._load_base_template()
 
     def _load_base_template(self) -> str:
-        """Load the base HTML template"""
-        # This is a simplified version - you can expand this to load from file
+        """Load the base HTML template with external CSS support"""
         return '''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{title}</title>
-    <style>
-        {styles}
-    </style>
+    <link rel="stylesheet" href="{theme_css}">
+    {custom_styles}
 </head>
 <body>
     <div class="container">
         {content}
     </div>
-    <script>
-        {scripts}
-    </script>
+    {scripts}
 </body>
 </html>'''
 
-    def generate_html(self, modules: List[Module], title: str = "Standard Operating Procedure") -> str:
-        """Generate complete HTML from modules"""
+    def set_theme(self, theme_name: str):
+        """Set the active theme"""
+        theme_path = self.themes_dir / f"{theme_name}.css"
+        if theme_path.exists():
+            self.theme_name = theme_name
+        else:
+            raise ValueError(f"Theme '{theme_name}' not found in {self.themes_dir}")
+
+    def generate_html(self, modules: List[Module], title: str = "Standard Operating Procedure",
+                      output_dir: Optional[Path] = None, embed_theme: bool = False) -> str:
+        """
+        Generate complete HTML from modules
+
+        Args:
+            modules: List of modules to render
+            title: Document title
+            output_dir: Directory where HTML will be saved (for relative CSS paths)
+            embed_theme: If True, embed CSS inline; if False, link to external file
+        """
         # Collect all module HTML
         content_html = ""
         for module in sorted(modules, key=lambda m: m.position):
             content_html += f'\n        {module.render_to_html()}'
 
-        # Generate CSS
-        styles = self._generate_styles()
+        # Handle theme CSS
+        if embed_theme:
+            # Read and embed the CSS file content
+            theme_css_content = self._load_theme_css()
+            theme_css_ref = ""
+            custom_styles = f"<style>\n{theme_css_content}\n</style>"
+        else:
+            # Link to external CSS file
+            if output_dir:
+                # Copy theme CSS to output directory
+                self._copy_theme_to_output(output_dir)
+                theme_css_ref = f"{self.theme_name}.css"
+            else:
+                # Use relative path to themes directory
+                theme_css_ref = f"assets/themes/{self.theme_name}.css"
+            custom_styles = ""
 
         # Generate JavaScript
         scripts = self._generate_scripts()
@@ -50,16 +80,65 @@ class HTMLGenerator:
         # Combine everything
         html = self.base_template.format(
             title=title,
-            styles=styles,
+            theme_css=theme_css_ref,
+            custom_styles=custom_styles,
             content=content_html,
             scripts=scripts
         )
 
         return html
 
-    def _generate_styles(self) -> str:
-        """Generate CSS styles for the SOP"""
-        # Based on the Lineage example, here's a subset of essential styles
+    def _load_theme_css(self) -> str:
+        """Load CSS content from theme file"""
+        theme_path = self.themes_dir / f"{self.theme_name}.css"
+        if theme_path.exists():
+            with open(theme_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        else:
+            # Fallback to default styles if theme not found
+            return self._generate_default_styles()
+
+    def _copy_theme_to_output(self, output_dir: Path):
+        """Copy theme CSS file to output directory"""
+        theme_source = self.themes_dir / f"{self.theme_name}.css"
+        theme_dest = output_dir / f"{self.theme_name}.css"
+
+        if theme_source.exists():
+            # Create output directory if it doesn't exist
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            # Copy the CSS file
+            shutil.copy2(theme_source, theme_dest)
+
+            # Also copy any assets referenced in the CSS (like fonts, images)
+            self._copy_theme_assets(output_dir)
+
+    def _copy_theme_assets(self, output_dir: Path):
+        """Copy theme-related assets (fonts, images) to output directory"""
+        assets_dir = Path("assets")
+        output_assets_dir = output_dir / "Assets"
+
+        # List of asset files referenced in Kodiak theme
+        kodiak_assets = [
+            "Gin_Round.otf",
+            "background.jpg",
+            "bear_red.png",
+            "bear_paw.png",
+            "Mountains.png",
+            "Kodiak.png"
+        ]
+
+        # Create Assets directory in output
+        output_assets_dir.mkdir(parents=True, exist_ok=True)
+
+        # Copy each asset if it exists
+        for asset in kodiak_assets:
+            source = assets_dir / asset
+            if source.exists():
+                shutil.copy2(source, output_assets_dir / asset)
+
+    def _generate_default_styles(self) -> str:
+        """Generate default CSS styles as fallback"""
         return '''
         :root {
             --primary-color: #2c3e50;
@@ -67,8 +146,6 @@ class HTMLGenerator:
             --background-color: #ecf0f1;
             --text-color: #2c3e50;
             --border-color: #bdc3c7;
-            --warning-color: #e74c3c;
-            --success-color: #27ae60;
         }
 
         body {
@@ -87,301 +164,12 @@ class HTMLGenerator:
             background-color: white;
             min-height: 100vh;
         }
-
-        /* Header Styles */
-        .header {
-            background-color: var(--primary-color);
-            color: white;
-            padding: 2rem;
-            margin: -2rem -2rem 2rem -2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .header h1 {
-            margin: 0;
-            font-size: 2.5rem;
-        }
-
-        .logo-container {
-            width: 150px;
-            height: 150px;
-        }
-
-        .logo-container img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-        }
-
-        /* Section Title Styles */
-        .section-title {
-            margin: 3rem 0 2rem 0;
-            padding-bottom: 0.5rem;
-            border-bottom: 2px solid var(--primary-color);
-        }
-
-        .section-title h2 {
-            color: var(--primary-color);
-            margin: 0;
-        }
-
-        /* Step Card Styles */
-        .step-card {
-            background: white;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 2rem;
-            margin: 1.5rem 0;
-            position: relative;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .step-number {
-            position: absolute;
-            top: -15px;
-            left: -15px;
-            width: 40px;
-            height: 40px;
-            background: var(--secondary-color);
-            color: white;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 1.2rem;
-        }
-
-        /* Media Container Styles */
-        .media-container {
-            margin: 2rem 0;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            overflow: hidden;
-            max-width: var(--media-max-width, 800px);
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        .media-header {
-            background: var(--primary-color);
-            color: white;
-            padding: 0.75rem 1rem;
-            font-weight: bold;
-        }
-
-        .media-content {
-            background: #f8f9fa;
-            padding: 1rem;
-            text-align: center;
-        }
-
-        .media-content img {
-            max-width: 100%;
-            height: auto;
-            cursor: pointer;
-        }
-
-        .media-caption {
-            padding: 0.75rem 1rem;
-            background: #f8f9fa;
-            border-top: 1px solid var(--border-color);
-            font-size: 0.9rem;
-            color: #666;
-        }
-
-        /* Table Styles */
-        .custom-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 1rem 0;
-        }
-
-        .custom-table th,
-        .custom-table td {
-            padding: 0.75rem;
-            text-align: left;
-            border: 1px solid var(--border-color);
-        }
-
-        .custom-table th {
-            background: var(--primary-color);
-            color: white;
-            font-weight: bold;
-        }
-
-        .custom-table tr:hover {
-            background: #f8f9fa;
-        }
-
-        /* Disclaimer Box */
-        .disclaimer-box {
-            background: #fff3cd;
-            border: 1px solid #ffeaa7;
-            border-left: 4px solid var(--warning-color);
-            padding: 1.5rem;
-            margin: 2rem 0;
-            border-radius: 4px;
-        }
-
-        .disclaimer-box.disclaimer-warning {
-            background: #fff3cd;
-            border-color: #ffeaa7;
-            border-left-color: var(--warning-color);
-        }
-
-        .disclaimer-box.disclaimer-info {
-            background: #d1ecf1;
-            border-color: #bee5eb;
-            border-left-color: var(--secondary-color);
-        }
-
-        .disclaimer-box.disclaimer-success {
-            background: #d4edda;
-            border-color: #c3e6cb;
-            border-left-color: var(--success-color);
-        }
-
-        /* Issue Card */
-        .issue-card {
-            background: white;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 1.5rem;
-            margin: 1.5rem 0;
-        }
-
-        .issue-card h4 {
-            color: var(--warning-color);
-            margin: 0 0 1rem 0;
-        }
-
-        .solution {
-            background: #f8f9fa;
-            padding: 1rem;
-            margin-top: 1rem;
-            border-left: 3px solid var(--secondary-color);
-        }
-
-        /* Footer */
-        .footer {
-            background: var(--primary-color);
-            color: white;
-            padding: 2rem;
-            margin: 2rem -2rem -2rem -2rem;
-            text-align: center;
-        }
-
-        /* Text Module */
-        .text-module {
-            margin: 1.5rem 0;
-        }
-
-        .text-content p {
-            margin: 0.5rem 0;
-        }
-
-        .text-emphasized {
-            font-style: italic;
-            color: #555;
-        }
-
-        .text-code {
-            font-family: 'Courier New', monospace;
-            background: #f8f9fa;
-            padding: 0.25rem 0.5rem;
-            border-radius: 3px;
-        }
-
-        /* Media Grid */
-        .media-grid {
-            display: grid;
-            gap: 1rem;
-            margin: 2rem 0;
-        }
-
-        .media-grid.side-by-side {
-            grid-template-columns: 1fr 1fr;
-        }
-
-        .media-grid.grid-3 {
-            grid-template-columns: repeat(3, 1fr);
-        }
-
-        .media-grid.grid-4 {
-            grid-template-columns: repeat(4, 1fr);
-        }
-
-        @media (max-width: 768px) {
-            .media-grid {
-                grid-template-columns: 1fr !important;
-            }
-        }
-
-        /* Tabs */
-        .tabs {
-            display: flex;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-            border-bottom: 2px solid var(--border-color);
-        }
-
-        .tab {
-            padding: 0.75rem 1.5rem;
-            background: #f8f9fa;
-            border: 1px solid var(--border-color);
-            border-bottom: none;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .tab.active {
-            background: white;
-            border-color: var(--primary-color);
-            color: var(--primary-color);
-            font-weight: bold;
-        }
-
-        .section-content {
-            display: none;
-            padding: 1rem 0;
-        }
-
-        .section-content.active {
-            display: block;
-        }
-
-        /* Modal for image viewing */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.8);
-        }
-
-        .modal-content {
-            position: relative;
-            margin: 5% auto;
-            max-width: 90%;
-            max-height: 90vh;
-        }
-
-        .modal-content img {
-            width: 100%;
-            height: auto;
-            max-height: 85vh;
-            object-fit: contain;
-        }'''
+        '''
 
     def _generate_scripts(self) -> str:
         """Generate JavaScript for interactive elements"""
         return '''
+    <script>
         // Tab functionality
         document.addEventListener('DOMContentLoaded', function() {
             const tabs = document.querySelectorAll('.tab');
@@ -393,44 +181,75 @@ class HTMLGenerator:
                     sections.forEach(s => s.classList.remove('active'));
 
                     tab.classList.add('active');
-                    sections[index].classList.add('active');
+                    if (sections[index]) {
+                        sections[index].classList.add('active');
+                    }
                 });
             });
         });
 
         // Image modal functionality
         function openImageModal(img) {
+            const modal = document.getElementById('imageModal') || createModal();
+            const modalImg = modal.querySelector('img');
+            modal.style.display = "block";
+            modalImg.src = img.src;
+            document.body.style.overflow = 'hidden';
+        }
+
+        function createModal() {
             const modal = document.createElement('div');
+            modal.id = 'imageModal';
             modal.className = 'modal';
-            modal.innerHTML = `
-                <div class="modal-content">
-                    <img src="${img.src}" alt="${img.alt}">
-                </div>
-            `;
-
+            modal.innerHTML = '<div class="modal-content"><img src="" alt=""></div>';
             modal.onclick = function() {
-                modal.remove();
+                modal.style.display = "none";
+                document.body.style.overflow = 'auto';
             };
-
             document.body.appendChild(modal);
-            modal.style.display = 'block';
+            return modal;
         }
 
         // Add click handlers to images
         document.querySelectorAll('.media-content img').forEach(img => {
             if (img.onclick === null) {
+                img.style.cursor = 'pointer';
                 img.onclick = function() { openImageModal(this); };
             }
-        });'''
+        });
+
+        // Back to top functionality
+        window.onscroll = function() {
+            const backToTopButton = document.getElementById('backToTop');
+            if (backToTopButton) {
+                if (document.body.scrollTop > 500 || document.documentElement.scrollTop > 500) {
+                    backToTopButton.classList.add('visible');
+                } else {
+                    backToTopButton.classList.remove('visible');
+                }
+            }
+        };
+
+        // Escape key to close modal
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('imageModal');
+                if (modal && modal.style.display === 'block') {
+                    modal.style.display = 'none';
+                    document.body.style.overflow = 'auto';
+                }
+            }
+        });
+    </script>
+    '''
 
     def embed_asset(self, file_path: str) -> str:
         """Convert file to base64 data URL"""
         try:
             path = Path(file_path)
             if not path.exists():
-                return file_path  # Return as-is if file doesn't exist
+                return file_path
 
-            # Determine MIME type
             mime_types = {
                 '.jpg': 'image/jpeg',
                 '.jpeg': 'image/jpeg',
@@ -443,7 +262,6 @@ class HTMLGenerator:
 
             mime_type = mime_types.get(path.suffix.lower(), 'application/octet-stream')
 
-            # Read and encode file
             with open(path, 'rb') as f:
                 data = base64.b64encode(f.read()).decode('utf-8')
 
@@ -452,3 +270,10 @@ class HTMLGenerator:
         except Exception as e:
             print(f"Error embedding asset {file_path}: {e}")
             return file_path
+
+    def get_available_themes(self) -> List[str]:
+        """Get list of available themes"""
+        if not self.themes_dir.exists():
+            return []
+
+        return [f.stem for f in self.themes_dir.glob("*.css")]
