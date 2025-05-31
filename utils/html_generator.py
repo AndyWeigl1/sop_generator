@@ -52,9 +52,48 @@ class HTMLGenerator:
             output_dir: Directory where HTML will be saved (for relative CSS paths)
             embed_theme: If True, embed CSS inline; if False, link to external file
         """
-        # Collect all module HTML
+        # Sort modules by position
+        sorted_modules = sorted(modules, key=lambda m: m.position)
+
+        # Separate modules by type for proper structure
+        header_modules = []
+        tab_modules = []
+        content_modules = []
+        footer_modules = []
+
+        for module in sorted_modules:
+            if module.module_type == 'header':
+                header_modules.append(module)
+            elif module.module_type == 'tabs':
+                tab_modules.append(module)
+            elif module.module_type == 'footer':
+                footer_modules.append(module)
+            else:
+                content_modules.append(module)
+
+        # Generate HTML sections
         content_html = ""
-        for module in sorted(modules, key=lambda m: m.position):
+
+        # Add header modules (outside content-wrapper)
+        for module in header_modules:
+            content_html += f'\n        {module.render_to_html()}'
+
+        # Check if we have tabs - if so, create content-wrapper
+        if tab_modules:
+            content_html += '\n\n        <div class="content-wrapper">'
+
+            # Add tab modules
+            for module in tab_modules:
+                content_html += f'\n            {module.render_to_html()}'
+
+            content_html += '\n        </div>'
+
+        # Add any content modules that aren't inside tabs (outside content-wrapper)
+        for module in content_modules:
+            content_html += f'\n        {module.render_to_html()}'
+
+        # Add footer modules (outside content-wrapper)
+        for module in footer_modules:
             content_html += f'\n        {module.render_to_html()}'
 
         # Handle theme CSS
