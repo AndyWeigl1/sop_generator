@@ -1,12 +1,12 @@
 # app/sop_builder.py
 import customtkinter as ctk
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 from modules.base_module import Module
 from modules.module_factory import ModuleFactory
 from gui.main_window import MainWindow, AVAILABLE_MODULES
 from gui.canvas_panel import CanvasPanel
 from gui.properties_panel import PropertiesPanel
-import json
+from modules.complex_modules import TabModule
 from pathlib import Path
 from tkinter import filedialog, messagebox
 from utils.html_generator import HTMLGenerator
@@ -24,6 +24,9 @@ class SOPBuilderApp:
         self.current_project_path: Optional[Path] = None
         self.selected_module: Optional[Module] = None
         self.is_modified = False
+
+        # Tab context tracking
+        self.selected_tab_context: Optional[Tuple[TabModule, str]] = None  # (TabModule, tab_name)
 
         # Initialize components
         self.main_window = MainWindow(self)
@@ -94,20 +97,28 @@ class SOPBuilderApp:
         self.main_window.populate_module_library(AVAILABLE_MODULES)
 
     def add_module_to_canvas(self, module_type: str):
-        """Add a new module instance to the SOP"""
+        """Add a new module instance to the SOP or to a selected tab"""
         try:
             # Create module instance
             module = ModuleFactory.create_module(module_type)
-            module.position = len(self.active_modules)
 
-            # Add to active modules
-            self.active_modules.append(module)
-
-            # Add to canvas
-            self.canvas_panel.add_module_widget(module)
-
-            # Select the new module
-            self.select_module(module)
+            # Check if we should add to a tab or to the main canvas
+            if self.selected_tab_context:
+                tab_module, tab_name = self.selected_tab_context
+                # Add to the selected tab
+                if tab_module.add_module_to_tab(tab_name, module): # Assuming TabModule.add_module_to_tab exists
+                    # Update canvas to show the module in the tab
+                    self.canvas_panel.add_module_to_tab_widget(tab_module, tab_name, module)
+                    # Select the new module
+                    self.select_module(module, parent_tab=(tab_module, tab_name))
+                else:
+                    messagebox.showerror("Error", f"Failed to add module to tab '{tab_name}'")
+            else:
+                # Add to main canvas (existing behavior)
+                module.position = len(self.active_modules)
+                self.active_modules.append(module)
+                self.canvas_panel.add_module_widget(module)
+                self.select_module(module)
 
             # Mark as modified
             self.set_modified(True)
@@ -115,19 +126,51 @@ class SOPBuilderApp:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to add module: {str(e)}")
 
-    def select_module(self, module: Module):
+    def select_module(self, module: Module, parent_tab: Optional[Tuple[TabModule, str]] = None):
         """Select a module and show its properties"""
         self.selected_module = module
-        self.properties_panel.show_module_properties(module)
+
+        # Update context based on selection
+        if isinstance(module, TabModule):
+            # When selecting a TabModule, clear tab context
+            self.selected_tab_context = None
+        elif parent_tab:
+            # When selecting a module within a tab, maintain that context
+            self.selected_tab_context = parent_tab
+
+        self.properties_panel.show_module_properties(module, parent_tab)
         self.canvas_panel.highlight_module(module)
 
+    def select_tab(self, tab_module: TabModule, tab_name: str):
+        """Select a specific tab within a TabModule"""
+        self.selected_tab_context = (tab_module, tab_name)
+        self.selected_module = None # Clear module selection
+        self.properties_panel.show_tab_properties(tab_module, tab_name)
+        self.canvas_panel.highlight_tab(tab_module, tab_name)
+
     def remove_module(self, module_id: str):
-        """Remove a module from the SOP"""
-        # Find and remove module
+        """Remove a module from the SOP (from main canvas or from a tab)"""
+        # First check if it's in a tab
+        for module_iter in self.active_modules: # Changed variable name to avoid conflict
+            if isinstance(module_iter, TabModule):
+                tab_name = module_iter.find_module_tab(module_id) # Assuming TabModule.find_module_tab exists
+                if tab_name:
+                    # Remove from tab
+                    removed_module = module_iter.remove_module_from_tab(tab_name, module_id) # Assuming TabModule.remove_module_from_tab exists
+                    if removed_module:
+                        self.canvas_panel.remove_module_from_tab_widget(module_iter, tab_name, module_id)
+                        # Clear selection if this was selected
+                        if self.selected_module and self.selected_module.id == module_id:
+                            self.selected_module = None
+                            self.properties_panel.clear()
+                        self.set_modified(True)
+                        return
+
+        # If not in a tab, check main canvas
         module_to_remove = None
-        for module in self.active_modules:
-            if module.id == module_id:
-                module_to_remove = module
+        for module_iter_main in self.active_modules: # Changed variable name
+            if module_iter_main.id == module_id:
+                module_to_remove = module_iter_main
                 break
 
         if module_to_remove:
@@ -137,11 +180,73 @@ class SOPBuilderApp:
             # Clear selection if this module was selected
             if self.selected_module == module_to_remove:
                 self.selected_module = None
+                self.selected_tab_context = None
                 self.properties_panel.clear()
 
             # Update positions
             self._update_module_positions()
             self.set_modified(True)
+
+    def move_module_to_tab(self, module: Module, target_tab: TabModule, tab_name: str):
+        """Move a module from main canvas to a tab"""
+        # Remove from main canvas
+        if module in self.active_modules:
+            self.active_modules.remove(module)
+            self.canvas_panel.remove_module_widget(module.id)
+
+            # Add to tab
+            if target_tab.add_module_to_tab(tab_name, module):  # Assuming TabModule.add_module_to_tab
+                self.canvas_panel.add_module_to_tab_widget(target_tab, tab_name, module)
+                self._update_module_positions()
+                self.set_modified(True)
+                return True
+        return False
+
+    def move_module_from_tab(self, module: Module, source_tab: TabModule, tab_name: str):
+        """Move a module from a tab to the main canvas"""
+        removed_module = source_tab.remove_module_from_tab(tab_name, module.id) # Assuming TabModule.remove_module_from_tab
+        if removed_module:
+            self.canvas_panel.remove_module_from_tab_widget(source_tab, tab_name, module.id)
+
+            # Add to main canvas
+            removed_module.position = len(self.active_modules)
+            self.active_modules.append(removed_module)
+            self.canvas_panel.add_module_widget(removed_module)
+
+            self._update_module_positions()
+            self.set_modified(True)
+            return True
+        return False
+
+    def get_all_modules_flat(self) -> List[Module]:
+        """Get all modules including nested ones in a flat list"""
+        all_modules = []
+        for module in self.active_modules:
+            all_modules.append(module)
+            if isinstance(module, TabModule):
+                all_modules.extend(module.get_all_nested_modules()) # Assuming TabModule.get_all_nested_modules
+        return all_modules
+
+    def find_module_by_id(self, module_id: str) -> Optional[Tuple[Module, Optional[Tuple[TabModule, str]]]]:
+        """Find a module by ID and return it with its parent context if in a tab"""
+        # Check main canvas
+        for module_iter in self.active_modules: # Changed variable name
+            if module_iter.id == module_id:
+                return (module_iter, None)
+
+            # Check within tabs
+            if isinstance(module_iter, TabModule):
+                tab_name = module_iter.find_module_tab(module_id) # Assuming TabModule.find_module_tab
+                if tab_name:
+                    # Ensure sub_modules is accessible and is a dict as expected
+                    if hasattr(module_iter, 'sub_modules') and isinstance(module_iter.sub_modules, dict):
+                        for sub_module in module_iter.sub_modules.get(tab_name, []):
+                            if sub_module.id == module_id:
+                                return (sub_module, (module_iter, tab_name))
+                    else: # Fallback or error if sub_modules structure is not as expected
+                        # This part depends on how TabModule stores its sub_modules
+                        pass
+        return None
 
     def reorder_modules(self, module_id: str, new_position: int):
         """Reorder modules in the SOP"""
@@ -218,28 +323,29 @@ class SOPBuilderApp:
         self.root.title("SOP Builder - Blank Project")
 
     def open_project(self):
-        """Open an existing project"""
-        filename = filedialog.askopenfilename(
+        """Open an existing project with tab hierarchy"""
+        filename_str = filedialog.askopenfilename(
             title="Open SOP Project",
             filetypes=[("SOP Project", "*.sopx"), ("All Files", "*.*")]
         )
 
-        if filename:
+        if filename_str:
             try:
                 # Load project
-                project_data = self.project_manager.load_project(filename)
+                project_data = self.project_manager.load_project(filename_str)
 
                 # Clear current
                 self.active_modules.clear()
                 self.canvas_panel.clear()
+                self.selected_tab_context = None
 
-                # Load modules
+                # Load modules with hierarchy
                 for module_data in project_data['modules']:
                     module = self.project_manager.deserialize_module(module_data)
                     self.active_modules.append(module)
-                    self.canvas_panel.add_module_widget(module)
+                    self.canvas_panel.add_module_widget(module, with_nested=True)
 
-                self.current_project_path = Path(filename)
+                self.current_project_path = Path(filename_str)
                 self.set_modified(False)
                 self.root.title(f"SOP Builder - {self.current_project_path.name}")
 
@@ -247,22 +353,25 @@ class SOPBuilderApp:
                 messagebox.showerror("Error", f"Failed to open project: {str(e)}")
 
     def save_project(self, save_as=False):
-        """Save current project"""
+        """Save current project with tab hierarchy"""
         if not self.current_project_path or save_as:
-            filename = filedialog.asksaveasfilename(
+            filename_str = filedialog.asksaveasfilename(
                 title="Save SOP Project",
                 defaultextension=".sopx",
                 filetypes=[("SOP Project", "*.sopx"), ("All Files", "*.*")]
             )
-            if filename:
-                self.current_project_path = Path(filename)
+            if filename_str:
+                self.current_project_path = Path(filename_str)
             else:
                 return
 
+        if not self.current_project_path: # Still no path, return
+            return
+
         try:
-            # Save project
+            # Save project with hierarchy
             project_data = {
-                'version': '1.0',
+                'version': '1.1', # Updated version for tab support
                 'modules': [self.project_manager.serialize_module(m) for m in self.active_modules]
             }
 
