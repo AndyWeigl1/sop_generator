@@ -21,7 +21,7 @@ class CanvasPanel:
         # Create a frame to hold all module widgets
         self.modules_frame = ctk.CTkFrame(
             self.parent,
-            fg_color="transparent"
+            fg_color=("gray92", "gray12")  # Changed from "transparent"
         )
         self.modules_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
@@ -32,7 +32,7 @@ class CanvasPanel:
             self.modules_frame,
             fg_color="gray15",
             border_width=2,
-            border_color="transparent"
+            border_color=("gray15", "gray15")  # Changed from "transparent"
         )
         module_frame.pack(fill="x", padx=5, pady=5)
 
@@ -50,7 +50,7 @@ class CanvasPanel:
         type_label.pack(side="left", padx=10)
 
         # Control buttons
-        controls_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
+        controls_frame = ctk.CTkFrame(header_frame, fg_color="gray20")  # Changed from "transparent"
         controls_frame.pack(side="right", padx=5)
 
         # Move up button
@@ -145,7 +145,7 @@ class CanvasPanel:
         """Highlight the selected module"""
         # Remove previous highlight
         if self.selected_widget:
-            self.selected_widget.configure(border_color="transparent")
+            self.selected_widget.configure(border_color=("gray15", "gray15"))  # Changed from "transparent"
 
         # Add highlight to selected module
         if module.id in self.module_widgets:
