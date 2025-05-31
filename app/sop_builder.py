@@ -6,7 +6,7 @@ from modules.module_factory import ModuleFactory
 from gui.main_window import MainWindow, AVAILABLE_MODULES
 from gui.canvas_panel import CanvasPanel
 from gui.properties_panel import PropertiesPanel
-from modules.complex_modules import TabModule
+from modules.complex_module import TabModule
 from pathlib import Path
 from tkinter import filedialog, messagebox
 from utils.html_generator import HTMLGenerator
