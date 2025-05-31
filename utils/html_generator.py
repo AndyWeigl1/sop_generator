@@ -1,6 +1,7 @@
 # utils/html_generator.py
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Set
 from modules.base_module import Module
+from modules.complex_modules import TabModule
 import base64
 from pathlib import Path
 import shutil
@@ -44,16 +45,19 @@ class HTMLGenerator:
     def generate_html(self, modules: List[Module], title: str = "Standard Operating Procedure",
                       output_dir: Optional[Path] = None, embed_theme: bool = False) -> str:
         """
-        Generate complete HTML from modules
+        Generate complete HTML from modules with proper hierarchical rendering
 
         Args:
-            modules: List of modules to render
+            modules: List of top-level modules only (nested modules are handled by their parents)
             title: Document title
             output_dir: Directory where HTML will be saved (for relative CSS paths)
             embed_theme: If True, embed CSS inline; if False, link to external file
         """
-        # Sort modules by position
+        # Sort top-level modules by position
         sorted_modules = sorted(modules, key=lambda m: m.position)
+
+        # Track which modules have been rendered to avoid duplicates
+        rendered_module_ids: Set[str] = set()
 
         # Separate modules by type for proper structure
         header_modules = []
@@ -64,7 +68,7 @@ class HTMLGenerator:
         for module in sorted_modules:
             if module.module_type == 'header':
                 header_modules.append(module)
-            elif module.module_type == 'tabs':
+            elif module.module_type == 'tabs': # Assuming TabModule has module_type 'tabs'
                 tab_modules.append(module)
             elif module.module_type == 'footer':
                 footer_modules.append(module)
@@ -76,25 +80,44 @@ class HTMLGenerator:
 
         # Add header modules (outside content-wrapper)
         for module in header_modules:
-            content_html += f'\n        {module.render_to_html()}'
+            content_html += f'\n {module.render_to_html()}'
+            rendered_module_ids.add(module.id)
 
         # Check if we have tabs - if so, create content-wrapper
-        if tab_modules:
-            content_html += '\n\n        <div class="content-wrapper">'
+        has_tabs = any(isinstance(m, TabModule) for m in tab_modules) # More robust check
+        if has_tabs: # Check if tab_modules list itself is populated by TabModule instances
+            content_html += '\n\n <div class="content-wrapper">'
 
-            # Add tab modules
-            for module in tab_modules:
-                content_html += f'\n            {module.render_to_html()}'
+        # Add tab modules - they will render their own nested content
+        for tab_module_candidate in tab_modules:
+            if isinstance(tab_module_candidate, TabModule): # Ensure it's a TabModule
+                content_html += f'\n {tab_module_candidate.render_to_html()}'
+                rendered_module_ids.add(tab_module_candidate.id)
 
-            content_html += '\n        </div>'
+                # Mark all nested modules as rendered
+                for nested_module in tab_module_candidate.get_all_nested_modules(): # Assuming this method exists
+                    rendered_module_ids.add(nested_module.id)
+            else:
+                # If it's not a TabModule but ended up in tab_modules, render it as a content module
+                 content_html += f'\n {tab_module_candidate.render_to_html()}'
+                 rendered_module_ids.add(tab_module_candidate.id)
 
-        # Add any content modules that aren't inside tabs (outside content-wrapper)
+
+        if has_tabs: # Close content-wrapper only if it was opened
+            content_html += '\n </div>'
+
+        # Add any content modules that aren't inside tabs
+        # Only render modules that haven't been rendered as part of a tab
         for module in content_modules:
-            content_html += f'\n        {module.render_to_html()}'
+            if module.id not in rendered_module_ids:
+                content_html += f'\n {module.render_to_html()}'
+                rendered_module_ids.add(module.id)
 
         # Add footer modules (outside content-wrapper)
         for module in footer_modules:
-            content_html += f'\n        {module.render_to_html()}'
+            if module.id not in rendered_module_ids: # Check if already rendered (e.g. if it was miscategorized)
+                content_html += f'\n {module.render_to_html()}'
+                rendered_module_ids.add(module.id)
 
         # Handle theme CSS
         if embed_theme:
@@ -109,9 +132,12 @@ class HTMLGenerator:
                 self._copy_theme_to_output(output_dir)
                 theme_css_ref = f"{self.theme_name}.css"
             else:
-                # Use relative path to themes directory
-                theme_css_ref = f"assets/themes/{self.theme_name}.css"
+                # Use relative path to themes directory if output_dir is not specified
+                # This might be problematic if the HTML is not saved relative to the project structure.
+                # A more robust solution might involve absolute paths or ensuring output_dir.
+                theme_css_ref = f"assets/themes/{self.theme_name}.css" # This assumes HTML is in project root
             custom_styles = ""
+
 
         # Generate JavaScript
         scripts = self._generate_scripts()
@@ -206,81 +232,124 @@ class HTMLGenerator:
         '''
 
     def _generate_scripts(self) -> str:
-        """Generate JavaScript for interactive elements"""
+        """Generate JavaScript for interactive elements including tab functionality"""
         return '''
-    <script>
-        // Tab functionality
-        document.addEventListener('DOMContentLoaded', function() {
-            const tabs = document.querySelectorAll('.tab');
-            const sections = document.querySelectorAll('.section-content');
+<script>
+// Tab functionality
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle all tab containers on the page
+    const tabContainers = document.querySelectorAll('.tabs');
 
-            tabs.forEach((tab, index) => {
-                tab.addEventListener('click', () => {
-                    tabs.forEach(t => t.classList.remove('active'));
-                    sections.forEach(s => s.classList.remove('active'));
+    tabContainers.forEach((tabContainer, containerIndex) => {
+        const tabs = tabContainer.querySelectorAll('.tab');
+        // Assuming section-content are direct children of the tabContainer's parent
+        // or need a more specific selector if nested deeper.
+        const parentElement = tabContainer.closest('.content-wrapper') || tabContainer.parentElement;
+        const sections = Array.from(parentElement.querySelectorAll('.section-content'));
 
-                    tab.classList.add('active');
-                    if (sections[index]) {
-                        sections[index].classList.add('active');
-                    }
-                });
+        // Filter sections that are specifically for this tab set, if necessary
+        // This part can be tricky if multiple tab sets are in the same parentElement.
+        // For simplicity, assuming a direct correspondence or a unique class per tab set's sections.
+
+        tabs.forEach((tab, index) => {
+            tab.addEventListener('click', () => {
+                // Remove active class from all tabs in this specific container
+                tabs.forEach(t => t.classList.remove('active'));
+
+                // Remove active class from all sections related to this tab container
+                // This needs to be precise. If sections are globally selected,
+                // you might hide sections from other tab groups.
+                // A common pattern is sections having an ID linked to the tab or a shared parent.
+                sections.forEach(s => s.classList.remove('active'));
+
+                // Add active class to clicked tab
+                tab.classList.add('active');
+
+                // Add active class to the corresponding section
+                // This relies on the order of tabs matching the order of sections.
+                // Or sections could have data-attributes linking them to tabs.
+                if (sections[index]) { // Check if a corresponding section exists
+                    sections[index].classList.add('active');
+                } else {
+                    // console.warn(`No section found for tab index ${index} in container ${containerIndex}`);
+                }
             });
         });
 
-        // Image modal functionality
-        function openImageModal(img) {
-            const modal = document.getElementById('imageModal') || createModal();
-            const modalImg = modal.querySelector('img');
-            modal.style.display = "block";
-            modalImg.src = img.src;
-            document.body.style.overflow = 'hidden';
+        // Optionally, activate the first tab by default if none are active
+        if (tabs.length > 0 && !tabContainer.querySelector('.tab.active')) {
+            tabs[0].click(); // Simulate a click to activate the first tab and its content
         }
+    });
+});
 
-        function createModal() {
-            const modal = document.createElement('div');
-            modal.id = 'imageModal';
-            modal.className = 'modal';
-            modal.innerHTML = '<div class="modal-content"><img src="" alt=""></div>';
-            modal.onclick = function() {
-                modal.style.display = "none";
-                document.body.style.overflow = 'auto';
-            };
-            document.body.appendChild(modal);
-            return modal;
+// Image modal functionality
+function openImageModal(img) {
+    const modal = document.getElementById('imageModal') || createModal();
+    const modalImg = modal.querySelector('img');
+    modal.style.display = "block";
+    modalImg.src = img.src;
+    document.body.style.overflow = 'hidden'; // Prevent background scrolling
+}
+
+function createModal() {
+    const modal = document.createElement('div');
+    modal.id = 'imageModal';
+    modal.className = 'modal'; // Ensure CSS for .modal is defined
+    // Modal content structure
+    modal.innerHTML = '<div class="modal-content"><span class="close-button">&times;</span><img src="" alt="Enlarged image"></div>';
+
+    // Close modal on click outside image (on modal background) or on close button
+    const closeButton = modal.querySelector('.close-button');
+    closeButton.onclick = function() {
+        modal.style.display = "none";
+        document.body.style.overflow = 'auto';
+    };
+    modal.onclick = function(event) {
+        // Close only if the click is on the modal background itself, not on its children (like the image)
+        if (event.target === modal) {
+            modal.style.display = "none";
+            document.body.style.overflow = 'auto';
         }
+    };
+    document.body.appendChild(modal);
+    return modal;
+}
 
-        // Add click handlers to images
-        document.querySelectorAll('.media-content img').forEach(img => {
-            if (img.onclick === null) {
-                img.style.cursor = 'pointer';
-                img.onclick = function() { openImageModal(this); };
-            }
-        });
+// Add click handlers to images that should be modal
+// Consider a more specific selector if not all images in .media-content are modal-triggering
+document.querySelectorAll('.media-content img').forEach(img => {
+    // Check if it already has an onclick to avoid re-binding if script runs multiple times
+    if (img.onclick === null) { 
+        img.style.cursor = 'pointer';
+        img.onclick = function() { openImageModal(this); };
+    }
+});
 
-        // Back to top functionality
-        window.onscroll = function() {
-            const backToTopButton = document.getElementById('backToTop');
-            if (backToTopButton) {
-                if (document.body.scrollTop > 500 || document.documentElement.scrollTop > 500) {
-                    backToTopButton.classList.add('visible');
-                } else {
-                    backToTopButton.classList.remove('visible');
-                }
-            }
-        };
+// Back to top functionality
+window.onscroll = function() {
+    const backToTopButton = document.getElementById('backToTop');
+    if (backToTopButton) {
+        if (document.body.scrollTop > 500 || document.documentElement.scrollTop > 500) {
+            backToTopButton.classList.add('visible');
+        } else {
+            backToTopButton.classList.remove('visible');
+        }
+    }
+};
 
-        // Escape key to close modal
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                const modal = document.getElementById('imageModal');
-                if (modal && modal.style.display === 'block') {
-                    modal.style.display = 'none';
-                    document.body.style.overflow = 'auto';
-                }
-            }
-        });
-    </script>
-    '''
+// Escape key to close modal
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' || e.key === 'Esc') { // 'Esc' for older browsers
+        const modal = document.getElementById('imageModal');
+        if (modal && modal.style.display === 'block') {
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+    }
+});
+</script>
+'''
 
     def embed_asset(self, file_path: str) -> str:
         """Convert file to base64 data URL"""
