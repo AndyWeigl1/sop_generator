@@ -1,0 +1,33 @@
+{
+  "kodiak": {
+    "name": "Kodiak",
+    "description": "Professional theme with Kodiak branding",
+    "author": "Kodiak Cakes",
+    "version": "1.0",
+    "assets": [
+      "Gin_Round.otf",
+      "background.jpg",
+      "bear_red.png",
+      "bear_paw.png",
+      "Mountains.png",
+      "Kodiak.png"
+    ],
+    "colors": {
+      "primary": "#B22234",
+      "secondary": "#4A3828",
+      "background": "#D4B69A"
+    }
+  },
+  "default": {
+    "name": "Default",
+    "description": "Clean, minimal theme",
+    "author": "System",
+    "version": "1.0",
+    "assets": [],
+    "colors": {
+      "primary": "#2c3e50",
+      "secondary": "#3498db",
+      "background": "#ecf0f1"
+    }
+  }
+}
