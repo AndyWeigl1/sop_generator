@@ -26,7 +26,7 @@ from modules.disclaimer_module import DisclaimerModule
 from modules.footer_module import FooterModule
 from modules.media_grid_module import MediaGridModule
 from modules.issue_card_module import IssueCardModule
-from modules.complex_modules import TabModule
+from modules.complex_module import TabModule
 
 
 def register_modules():
