@@ -15,7 +15,7 @@ class PropertiesPanel:
         self.property_widgets: Dict[str, ctk.CTkBaseClass] = {}
 
         # Create a frame for the content
-        self.content_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self.content_frame = ctk.CTkFrame(parent, fg_color=("gray90", "gray15"))  # Changed from "transparent"
         self.content_frame.pack(fill="both", expand=True)
 
         # Show empty state initially
@@ -44,7 +44,7 @@ class PropertiesPanel:
         self.current_module = module
 
         # Module name header
-        header_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+        header_frame = ctk.CTkFrame(self.content_frame, fg_color=("gray90", "gray15"))  # Changed from "transparent"
         header_frame.pack(fill="x", padx=10, pady=(10, 20))
 
         module_label = ctk.CTkLabel(
@@ -73,7 +73,7 @@ class PropertiesPanel:
     def _create_property_field(self, field_name: str, field_type: str, module: Module):
         """Create a property field based on its type"""
         # Frame for the field
-        field_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+        field_frame = ctk.CTkFrame(self.content_frame, fg_color=("gray90", "gray15"))  # Changed from "transparent"
         field_frame.pack(fill="x", padx=10, pady=5)
 
         # Label
@@ -113,7 +113,7 @@ class PropertiesPanel:
 
         elif field_type == "file" or field_type == "file_or_url":
             # Frame for file input
-            file_frame = ctk.CTkFrame(field_frame, fg_color="transparent")
+            file_frame = ctk.CTkFrame(field_frame, fg_color=("gray90", "gray15"))  # Changed from "transparent"
             file_frame.pack(side="left", fill="x", expand=True)
 
             widget = ctk.CTkEntry(file_frame, width=150)
