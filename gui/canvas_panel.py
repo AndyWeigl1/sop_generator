@@ -477,11 +477,14 @@ class CanvasPanel:
         """Remove a module widget from a tab"""
         widget_key = f"{tab_module.id}:{tab_name}:{module_id}"
         if widget_key in self.module_widgets:
-            self.module_widgets[widget_key].destroy()
+            widget = self.module_widgets[widget_key]
+
+            # Clear selection if this widget is currently selected
+            if self.selected_widget == widget:
+                self.selected_widget = None
+
+            widget.destroy()
             del self.module_widgets[widget_key]
-            # Also remove from the TabModule's internal list of sub_modules
-            # tab_module.remove_sub_module(tab_name, module_id) # Assuming such a method exists
-            # self.app.set_modified(True)
 
     def highlight_tab(self, tab_module: TabModule, tab_name: str):
         """Highlight a selected tab"""
@@ -525,29 +528,61 @@ class CanvasPanel:
 
     def highlight_module(self, module: Module):
         """Highlight the selected module"""
-        # Remove previous highlight
+        # Remove previous highlight (with error handling for destroyed widgets)
         if self.selected_widget:
-            self.selected_widget.configure(border_color=("gray15", "gray15"))  # Changed from "transparent"
+            try:
+                self.selected_widget.configure(border_color=("gray15", "gray15"))
+            except Exception:
+                # Widget was destroyed, clear the reference
+                self.selected_widget = None
 
         # Add highlight to selected module
         if module.id in self.module_widgets:
             widget = self.module_widgets[module.id]
-            widget.configure(border_color="blue")
-            self.selected_widget = widget
+            try:
+                widget.configure(border_color="blue")
+                self.selected_widget = widget
+            except Exception:
+                # Widget is invalid, remove from tracking
+                del self.module_widgets[module.id]
+                self.selected_widget = None
 
     def remove_module_widget(self, module_id: str):
         """Remove module widget from canvas"""
         if module_id in self.module_widgets:
             widget = self.module_widgets[module_id]
+
+            # Clear selection if this widget is currently selected
+            if self.selected_widget == widget:
+                self.selected_widget = None
+
             widget.destroy()
             del self.module_widgets[module_id]
 
+            # Also clean up any tab-related widgets for this module
+            keys_to_remove = [key for key in self.module_widgets.keys() if key.startswith(f"{module_id}:")]
+            for key in keys_to_remove:
+                if self.module_widgets[key] == self.selected_widget:
+                    self.selected_widget = None
+                self.module_widgets[key].destroy()
+                del self.module_widgets[key]
+
     def clear(self):
         """Clear all modules from canvas"""
-        for widget in self.module_widgets.values():
-            widget.destroy()
-        self.module_widgets.clear()
+        # Clear selection first
         self.selected_widget = None
+
+        # Destroy all widgets
+        for widget in self.module_widgets.values():
+            try:
+                widget.destroy()
+            except Exception:
+                # Widget already destroyed, ignore
+                pass
+
+        # Clear all tracking dictionaries
+        self.module_widgets.clear()
+        self.tab_widgets.clear()
 
     def refresh_order(self):
         """Refresh the visual order of modules"""
