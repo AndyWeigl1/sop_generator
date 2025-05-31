@@ -443,19 +443,10 @@ class CanvasPanel:
             self.module_widgets[tab_module.id].destroy()
             del self.module_widgets[tab_module.id]
 
-        # Clean up tab widgets associated with this module
+        # Clean up tab widget references (the actual widgets are already destroyed)
         if tab_module.id in self.tab_widgets:
-            for tab_name_key in list(self.tab_widgets[tab_module.id].keys()): # Iterate over a copy of keys
-                # Destroy widgets within each tab's container
-                tab_container = self.tab_widgets[tab_module.id][tab_name_key]
-                if tab_container: # Check if it's not None
-                    for widget in tab_container.winfo_children():
-                        widget.destroy()
-                    tab_container.destroy() # Destroy the container itself
-                # Remove the key from tab_widgets for this specific tab_module
-                del self.tab_widgets[tab_module.id][tab_name_key]
-            # After all tab containers for this module are cleared and destroyed
             del self.tab_widgets[tab_module.id]
+
         # Recreate
         self.add_module_widget(tab_module, with_nested=True)
 
