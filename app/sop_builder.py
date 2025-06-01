@@ -62,6 +62,7 @@ class SOPBuilderApp:
             self.active_modules.append(header_module)
             self.canvas_panel.add_module_widget(header_module)
 
+            # header_module.update_content('logo_path', 'Assets/Kodiak.png')
             # 2. Add Tab Module
             tab_module = ModuleFactory.create_module('tabs')
             tab_module.position = 1
