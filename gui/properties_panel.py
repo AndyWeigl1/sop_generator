@@ -4,6 +4,7 @@ from typing import Dict, Optional, Any, Tuple
 from modules.base_module import Module
 from modules.complex_module import TabModule
 from tkinter import filedialog
+import os
 
 
 class PropertiesPanel:
@@ -394,6 +395,16 @@ class PropertiesPanel:
             entry_widget.delete(0, "end")
             entry_widget.insert(0, filename)
             self._on_property_change(field_name, filename)
+
+            # Show a helpful message about file handling
+            if field_name == 'source':
+                import tkinter.messagebox as msgbox
+                msgbox.showinfo(
+                    "File Path Info",
+                    f"File selected: {os.path.basename(filename)}\n\n"
+                    "Note: When exporting to HTML, make sure to copy your media files "
+                    "to the 'Assets' folder next to your HTML file for proper display."
+                )
 
     def _delete_module(self):
         """Delete the current module"""
