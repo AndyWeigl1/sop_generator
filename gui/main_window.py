@@ -1,4 +1,4 @@
-# gui/main_window.py
+# gui/main_window.py - Enhanced with drag and drop from module library
 import customtkinter as ctk
 from typing import Dict, List
 import tkinter as tk
@@ -157,7 +157,7 @@ class ResizablePanedWindow(ctk.CTkFrame):
 
 
 class MainWindow:
-    """Main window layout for SOP Builder with resizable properties panel"""
+    """Main window layout for SOP Builder with enhanced drag and drop support"""
 
     def __init__(self, app_instance):
         self.app = app_instance
@@ -168,6 +168,11 @@ class MainWindow:
         self.root.geometry("1400x700")  # Slightly wider to accommodate larger properties panel
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
+
+        # Drag and drop state for module library
+        self.library_drag_data = None
+        self.library_drag_preview = None
+        self.is_dragging_from_library = False
 
         self._create_layout()
 
@@ -219,7 +224,7 @@ class MainWindow:
         # Status indicator
         self.status_label = ctk.CTkLabel(
             self.menu_frame,
-            text="Ready",
+            text="Ready - Drag modules from left panel to canvas",
             font=("Arial", 11),
             text_color="gray"
         )
@@ -228,7 +233,7 @@ class MainWindow:
         # Version info
         version_label = ctk.CTkLabel(
             self.menu_frame,
-            text="v2.0",
+            text="v2.1",
             font=("Arial", 10),
             text_color="gray"
         )
@@ -339,6 +344,19 @@ class MainWindow:
         )
         module_header.pack(pady=12)
 
+        # Instructions label
+        instructions_frame = ctk.CTkFrame(self.module_panel, fg_color="transparent")
+        instructions_frame.pack(fill="x", padx=8, pady=(5, 0))
+
+        instructions_label = ctk.CTkLabel(
+            instructions_frame,
+            text="💡 Drag modules to canvas or click to add",
+            font=("Arial", 10),
+            text_color="lightblue",
+            wraplength=250
+        )
+        instructions_label.pack(pady=3)
+
         # Search/filter frame
         search_frame = ctk.CTkFrame(self.module_panel, fg_color="transparent")
         search_frame.pack(fill="x", padx=8, pady=(8, 0))
@@ -355,7 +373,7 @@ class MainWindow:
         self._create_module_categories()
 
     def _create_module_categories(self):
-        """Create categorized module library"""
+        """Create categorized module library with drag and drop support"""
         # Main modules container
         self.module_list = ctk.CTkScrollableFrame(
             self.module_panel,
@@ -407,7 +425,7 @@ class MainWindow:
             self._create_module_button(module)
 
     def _create_module_button(self, module_info: Dict):
-        """Create an improved module button with description"""
+        """Create an enhanced module button with drag and drop support"""
         module_frame = ctk.CTkFrame(self.module_list, fg_color="gray18")
         module_frame.pack(fill="x", pady=2, padx=5)
 
@@ -415,9 +433,27 @@ class MainWindow:
         button_area = ctk.CTkFrame(module_frame, fg_color="transparent")
         button_area.pack(fill="x", padx=8, pady=6)
 
+        # Module button with drag handle
+        button_container = ctk.CTkFrame(button_area, fg_color="transparent")
+        button_container.pack(fill="x")
+
+        # Drag handle
+        drag_handle = ctk.CTkLabel(
+            button_container,
+            text="⋮⋮",
+            font=("Arial", 12, "bold"),
+            text_color="white",
+            width=25,
+            height=40,
+            fg_color="gray30",
+            corner_radius=3,
+            cursor="hand2"
+        )
+        drag_handle.pack(side="left", padx=(0, 5))
+
         # Module button
         module_btn = ctk.CTkButton(
-            button_area,
+            button_container,
             text=module_info['name'],
             height=40,
             font=("Arial", 12, "bold"),
@@ -426,7 +462,7 @@ class MainWindow:
             anchor="w",
             command=lambda: self.app.add_module_to_canvas(module_info['type'])
         )
-        module_btn.pack(fill="x")
+        module_btn.pack(side="left", fill="x", expand=True)
 
         # Description
         if 'desc' in module_info:
@@ -440,15 +476,249 @@ class MainWindow:
             )
             desc_label.pack(fill="x", pady=(3, 0))
 
+        # Enable drag and drop for this module button
+        self._enable_module_library_drag(drag_handle, module_btn, module_info)
+
         # Hover effects
         def on_enter(event):
             module_btn.configure(fg_color="gray35")
+            drag_handle.configure(fg_color="gray40")
 
         def on_leave(event):
             module_btn.configure(fg_color="gray25")
+            drag_handle.configure(fg_color="gray30")
 
         module_btn.bind("<Enter>", on_enter)
         module_btn.bind("<Leave>", on_leave)
+        drag_handle.bind("<Enter>", on_enter)
+        drag_handle.bind("<Leave>", on_leave)
+
+    def _enable_module_library_drag(self, drag_handle: ctk.CTkLabel, module_btn: ctk.CTkButton, module_info: Dict):
+        """Enable drag and drop from module library"""
+
+        def start_library_drag(event):
+            """Start dragging a module from the library"""
+            self.is_dragging_from_library = True
+            self.library_drag_data = {
+                'module_type': module_info['type'],
+                'module_name': module_info['name'],
+                'start_x': event.x_root,
+                'start_y': event.y_root,
+                'source_widget': drag_handle
+            }
+
+            # Create drag preview
+            self._create_library_drag_preview(event.x_root, event.y_root, module_info['name'])
+
+            # Visual feedback on source
+            try:
+                drag_handle.configure(fg_color="blue")
+                module_btn.configure(fg_color="blue")
+            except tk.TclError:
+                pass
+
+            # Bind global drag events
+            try:
+                self.root.bind('<B1-Motion>', on_library_drag_motion)
+                self.root.bind('<ButtonRelease-1>', end_library_drag)
+            except tk.TclError:
+                self._cleanup_library_drag()
+                return
+
+            # Update status
+            self.set_status("Dragging module - drop on canvas to add", "lightblue")
+
+        def on_library_drag_motion(event):
+            """Handle drag motion from library"""
+            if not self.library_drag_data or not self.is_dragging_from_library:
+                return
+
+            # Update drag preview position
+            if self.library_drag_preview:
+                try:
+                    self.library_drag_preview.geometry(f"250x50+{event.x_root + 10}+{event.y_root + 10}")
+                except:
+                    pass
+
+            # Check if we're over the canvas and provide visual feedback
+            try:
+                widget_under_cursor = self.root.winfo_containing(event.x_root, event.y_root)
+                self._update_library_drop_feedback(widget_under_cursor)
+            except tk.TclError:
+                pass
+
+        def end_library_drag(event):
+            """End library drag and handle drop"""
+            if not self.library_drag_data or not self.is_dragging_from_library:
+                return
+
+            try:
+                # Find drop target
+                drop_target = self.root.winfo_containing(event.x_root, event.y_root)
+
+                # Debug: Print what we're dropping on
+                # print(f"Drop target: {drop_target}")
+                # print(f"Drop target class: {drop_target.__class__.__name__ if drop_target else 'None'}")
+
+                # Check if dropped on canvas area
+                if self._is_canvas_drop_target(drop_target):
+                    # Check if canvas panel can handle the drop more specifically
+                    if hasattr(self.app, 'canvas_panel'):
+                        success = self.app.canvas_panel.handle_library_drop(drop_target,
+                                                                            self.library_drag_data['module_type'])
+                        if success:
+                            self.set_status(f"Added {self.library_drag_data['module_name']} to canvas", "green")
+                        else:
+                            # Fallback to app method
+                            module_type = self.library_drag_data['module_type']
+                            self.app.add_module_to_canvas(module_type)
+                            self.set_status(f"Added {self.library_drag_data['module_name']} to canvas", "green")
+                    else:
+                        # Fallback if no canvas panel
+                        module_type = self.library_drag_data['module_type']
+                        self.app.add_module_to_canvas(module_type)
+                        self.set_status(f"Added {self.library_drag_data['module_name']} to canvas", "green")
+                else:
+                    self.set_status("Drop cancelled - drag to canvas area to add modules", "orange")
+
+            except tk.TclError:
+                self.set_status("Drop cancelled", "orange")
+
+            # Cleanup
+            self._cleanup_library_drag()
+
+        # Bind drag initiation to drag handle
+        try:
+            drag_handle.bind('<Button-1>', start_library_drag)
+        except tk.TclError:
+            pass
+
+    def _create_library_drag_preview(self, x: int, y: int, module_name: str):
+        """Create drag preview for library modules"""
+        try:
+            self.library_drag_preview = ctk.CTkToplevel(self.root)
+            self.library_drag_preview.overrideredirect(True)
+            self.library_drag_preview.attributes('-alpha', 0.8)
+            self.library_drag_preview.geometry(f"250x50+{x + 10}+{y + 10}")
+
+            # Preview content
+            preview_frame = ctk.CTkFrame(self.library_drag_preview, fg_color="lightblue", corner_radius=8)
+            preview_frame.pack(fill="both", expand=True, padx=2, pady=2)
+
+            preview_label = ctk.CTkLabel(
+                preview_frame,
+                text=f"➕ {module_name}",
+                font=("Arial", 12, "bold"),
+                text_color="white"
+            )
+            preview_label.pack(expand=True)
+
+            instruction_label = ctk.CTkLabel(
+                preview_frame,
+                text="Drop on canvas to add",
+                font=("Arial", 9),
+                text_color="white"
+            )
+            instruction_label.pack()
+
+        except Exception as e:
+            print(f"Error creating library drag preview: {e}")
+            self.library_drag_preview = None
+
+    def _update_library_drop_feedback(self, widget_under_cursor):
+        """Update visual feedback when dragging from library"""
+        # For now, we'll let the canvas panel handle detailed drop zone highlighting
+        # But we can update the cursor or preview here if needed
+        pass
+
+    def _is_canvas_drop_target(self, widget) -> bool:
+        """Check if the widget is a valid drop target for library modules"""
+        if not widget:
+            return False
+
+        # Check if widget is part of the canvas area
+        current = widget
+        while current:
+            try:
+                # Check if this widget is marked as a canvas drop zone
+                if hasattr(current, '_is_canvas_drop_zone') and current._is_canvas_drop_zone:
+                    return True
+
+                # Check if this is the canvas scrollable frame or its children
+                if (hasattr(self.app, 'canvas_panel') and
+                        hasattr(self.app.canvas_panel, 'modules_frame') and
+                        current == self.app.canvas_panel.modules_frame):
+                    return True
+
+                # Check if this is the main canvas area
+                if current == self.canvas:
+                    return True
+
+                # Check if this is the canvas frame
+                if current == self.canvas_frame:
+                    return True
+
+                # Check if this is a tab drop zone
+                if hasattr(current, '_drop_zone_info'):
+                    return True
+
+                # Check if current widget is a child of the canvas
+                if (hasattr(self.app, 'canvas_panel') and
+                        hasattr(self.app.canvas_panel, 'parent') and
+                        current == self.app.canvas_panel.parent):
+                    return True
+
+                current = current.master
+            except (tk.TclError, AttributeError):
+                break
+
+        return False
+
+    def _cleanup_library_drag(self):
+        """Clean up library drag state"""
+        self.is_dragging_from_library = False
+
+        # Destroy drag preview
+        if self.library_drag_preview:
+            try:
+                self.library_drag_preview.destroy()
+            except:
+                pass
+            self.library_drag_preview = None
+
+        # Reset source widget appearance
+        if self.library_drag_data and self.library_drag_data.get('source_widget'):
+            source_widget = self.library_drag_data['source_widget']
+            try:
+                if self._safe_widget_exists(source_widget):
+                    source_widget.configure(fg_color="gray30")
+                    # Find the associated button and reset it too
+                    parent = source_widget.master
+                    if parent and self._safe_widget_exists(parent):
+                        for child in parent.winfo_children():
+                            if isinstance(child, ctk.CTkButton) and self._safe_widget_exists(child):
+                                child.configure(fg_color="gray25")
+                                break
+            except (tk.TclError, AttributeError):
+                pass
+
+        # Unbind global events
+        try:
+            self.root.unbind('<B1-Motion>')
+            self.root.unbind('<ButtonRelease-1>')
+        except:
+            pass
+
+        self.library_drag_data = None
+
+    def _safe_widget_exists(self, widget):
+        """Safely check if a widget exists and hasn't been destroyed"""
+        if widget is None:
+            return False
+        try:
+            return widget.winfo_exists()
+        except tk.TclError:
+            return False
 
     def update_width_indicator(self):
         """Update the properties panel width indicator"""
