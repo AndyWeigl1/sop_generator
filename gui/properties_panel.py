@@ -4,6 +4,7 @@ from typing import Dict, Optional, Any, Tuple, List
 from modules.base_module import Module
 from modules.complex_module import TabModule
 from tkinter import filedialog, messagebox
+from gui.components.text_formatting_toolbar import TextFormattingToolbar
 import os
 import json
 
@@ -261,14 +262,40 @@ class PropertiesPanel:
             widget.bind("<KeyRelease>", lambda e: self._on_property_change(field_name, widget.get()))
             return widget
 
-        elif field_type == "textarea":
-            widget = ctk.CTkTextbox(
-                parent,
+        elif field_type == "textarea" or field_type.startswith("textarea:"):
+            # Check if it's a formatted textarea
+            is_formatted = field_type.startswith("textarea:") and ":formatted" in field_type
+
+            if is_formatted:
+                # Create container for toolbar and textarea
+                textarea_container = ctk.CTkFrame(parent, fg_color="transparent")
+                textarea_container.pack(fill="x")
+
+                widget = ctk.CTkTextbox(
+                textarea_container,
                 height=100,
                 font=("Arial", 12),
                 wrap="word"
-            )
-            widget.pack(fill="x")
+                )
+                # Create the toolbar (it will pack itself above the textbox)
+                toolbar = TextFormattingToolbar(
+                    textarea_container,
+                    widget,
+                    field_name,
+                    self._on_property_change
+                )
+                # Pack the textbox below the toolbar
+                widget.pack(fill="x")
+            else:
+                # Regular textarea without formatting
+                widget = ctk.CTkTextbox(
+                    parent,
+                    height=100,
+                    font=("Arial", 12),
+                    wrap="word"
+                )
+                widget.pack(fill="x")
+
             if current_value:
                 widget.insert("1.0", str(current_value))
             widget.bind("<KeyRelease>", lambda e: self._on_property_change(field_name, widget.get("1.0", "end-1c")))
