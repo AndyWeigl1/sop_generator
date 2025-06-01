@@ -1,7 +1,7 @@
 # utils/html_generator.py
 from typing import List, Dict, Optional, Set
 from modules.base_module import Module
-from modules.complex_modules import TabModule
+from modules.complex_module import TabModule
 import base64
 from pathlib import Path
 import shutil
@@ -62,18 +62,18 @@ class HTMLGenerator:
         # Separate modules by type for proper structure
         header_modules = []
         tab_modules = []
-        content_modules = []
         footer_modules = []
+        other_modules = []  # Modules that don't belong in tabs
 
         for module in sorted_modules:
             if module.module_type == 'header':
                 header_modules.append(module)
-            elif module.module_type == 'tabs': # Assuming TabModule has module_type 'tabs'
+            elif module.module_type == 'tabs':
                 tab_modules.append(module)
             elif module.module_type == 'footer':
                 footer_modules.append(module)
             else:
-                content_modules.append(module)
+                other_modules.append(module)
 
         # Generate HTML sections
         content_html = ""
@@ -83,39 +83,37 @@ class HTMLGenerator:
             content_html += f'\n {module.render_to_html()}'
             rendered_module_ids.add(module.id)
 
-        # Check if we have tabs - if so, create content-wrapper
-        has_tabs = any(isinstance(m, TabModule) for m in tab_modules) # More robust check
-        if has_tabs: # Check if tab_modules list itself is populated by TabModule instances
+        # Check if we have tabs
+        has_tabs = len(tab_modules) > 0
+
+        if has_tabs:
+            # If we have tabs, ALL non-header/footer content goes inside content-wrapper
             content_html += '\n\n <div class="content-wrapper">'
 
-        # Add tab modules - they will render their own nested content
-        for tab_module_candidate in tab_modules:
-            if isinstance(tab_module_candidate, TabModule): # Ensure it's a TabModule
-                content_html += f'\n {tab_module_candidate.render_to_html()}'
-                rendered_module_ids.add(tab_module_candidate.id)
+            # For each tab module, render the complete tab structure
+            for tab_module in tab_modules:
+                if isinstance(tab_module, TabModule):
+                    # The TabModule's render_to_html should create the complete tab structure
+                    # including the tabs div and all section-content divs
+                    content_html += f'\n {tab_module.render_to_html()}'
+                    rendered_module_ids.add(tab_module.id)
 
-                # Mark all nested modules as rendered
-                for nested_module in tab_module_candidate.get_all_nested_modules(): # Assuming this method exists
-                    rendered_module_ids.add(nested_module.id)
-            else:
-                # If it's not a TabModule but ended up in tab_modules, render it as a content module
-                 content_html += f'\n {tab_module_candidate.render_to_html()}'
-                 rendered_module_ids.add(tab_module_candidate.id)
+                    # Mark all nested modules as rendered
+                    for nested_module in tab_module.get_all_nested_modules():
+                        rendered_module_ids.add(nested_module.id)
 
-
-        if has_tabs: # Close content-wrapper only if it was opened
+            # Close content-wrapper
             content_html += '\n </div>'
-
-        # Add any content modules that aren't inside tabs
-        # Only render modules that haven't been rendered as part of a tab
-        for module in content_modules:
-            if module.id not in rendered_module_ids:
-                content_html += f'\n {module.render_to_html()}'
-                rendered_module_ids.add(module.id)
+        else:
+            # No tabs - render other modules directly
+            for module in other_modules:
+                if module.id not in rendered_module_ids:
+                    content_html += f'\n {module.render_to_html()}'
+                    rendered_module_ids.add(module.id)
 
         # Add footer modules (outside content-wrapper)
         for module in footer_modules:
-            if module.id not in rendered_module_ids: # Check if already rendered (e.g. if it was miscategorized)
+            if module.id not in rendered_module_ids:
                 content_html += f'\n {module.render_to_html()}'
                 rendered_module_ids.add(module.id)
 
@@ -132,12 +130,9 @@ class HTMLGenerator:
                 self._copy_theme_to_output(output_dir)
                 theme_css_ref = f"{self.theme_name}.css"
             else:
-                # Use relative path to themes directory if output_dir is not specified
-                # This might be problematic if the HTML is not saved relative to the project structure.
-                # A more robust solution might involve absolute paths or ensuring output_dir.
-                theme_css_ref = f"assets/themes/{self.theme_name}.css" # This assumes HTML is in project root
+                # Use relative path to themes directory
+                theme_css_ref = f"assets/themes/{self.theme_name}.css"
             custom_styles = ""
-
 
         # Generate JavaScript
         scripts = self._generate_scripts()
@@ -237,49 +232,19 @@ class HTMLGenerator:
 <script>
 // Tab functionality
 document.addEventListener('DOMContentLoaded', function() {
-    // Handle all tab containers on the page
-    const tabContainers = document.querySelectorAll('.tabs');
+    const tabs = document.querySelectorAll('.tab');
+    const sections = document.querySelectorAll('.section-content');
 
-    tabContainers.forEach((tabContainer, containerIndex) => {
-        const tabs = tabContainer.querySelectorAll('.tab');
-        // Assuming section-content are direct children of the tabContainer's parent
-        // or need a more specific selector if nested deeper.
-        const parentElement = tabContainer.closest('.content-wrapper') || tabContainer.parentElement;
-        const sections = Array.from(parentElement.querySelectorAll('.section-content'));
+    tabs.forEach((tab, index) => {
+        tab.addEventListener('click', () => {
+            // Remove active class from all tabs and sections
+            tabs.forEach(t => t.classList.remove('active'));
+            sections.forEach(s => s.classList.remove('active'));
 
-        // Filter sections that are specifically for this tab set, if necessary
-        // This part can be tricky if multiple tab sets are in the same parentElement.
-        // For simplicity, assuming a direct correspondence or a unique class per tab set's sections.
-
-        tabs.forEach((tab, index) => {
-            tab.addEventListener('click', () => {
-                // Remove active class from all tabs in this specific container
-                tabs.forEach(t => t.classList.remove('active'));
-
-                // Remove active class from all sections related to this tab container
-                // This needs to be precise. If sections are globally selected,
-                // you might hide sections from other tab groups.
-                // A common pattern is sections having an ID linked to the tab or a shared parent.
-                sections.forEach(s => s.classList.remove('active'));
-
-                // Add active class to clicked tab
-                tab.classList.add('active');
-
-                // Add active class to the corresponding section
-                // This relies on the order of tabs matching the order of sections.
-                // Or sections could have data-attributes linking them to tabs.
-                if (sections[index]) { // Check if a corresponding section exists
-                    sections[index].classList.add('active');
-                } else {
-                    // console.warn(`No section found for tab index ${index} in container ${containerIndex}`);
-                }
-            });
+            // Add active class to clicked tab and corresponding section
+            tab.classList.add('active');
+            sections[index].classList.add('active');
         });
-
-        // Optionally, activate the first tab by default if none are active
-        if (tabs.length > 0 && !tabContainer.querySelector('.tab.active')) {
-            tabs[0].click(); // Simulate a click to activate the first tab and its content
-        }
     });
 });
 
@@ -295,36 +260,19 @@ function openImageModal(img) {
 function createModal() {
     const modal = document.createElement('div');
     modal.id = 'imageModal';
-    modal.className = 'modal'; // Ensure CSS for .modal is defined
-    // Modal content structure
-    modal.innerHTML = '<div class="modal-content"><span class="close-button">&times;</span><img src="" alt="Enlarged image"></div>';
+    modal.className = 'modal';
+    modal.innerHTML = '<div class="modal-content"><img src="" alt="Enlarged image"></div>';
 
-    // Close modal on click outside image (on modal background) or on close button
-    const closeButton = modal.querySelector('.close-button');
-    closeButton.onclick = function() {
-        modal.style.display = "none";
-        document.body.style.overflow = 'auto';
-    };
     modal.onclick = function(event) {
-        // Close only if the click is on the modal background itself, not on its children (like the image)
         if (event.target === modal) {
             modal.style.display = "none";
             document.body.style.overflow = 'auto';
         }
     };
+
     document.body.appendChild(modal);
     return modal;
 }
-
-// Add click handlers to images that should be modal
-// Consider a more specific selector if not all images in .media-content are modal-triggering
-document.querySelectorAll('.media-content img').forEach(img => {
-    // Check if it already has an onclick to avoid re-binding if script runs multiple times
-    if (img.onclick === null) { 
-        img.style.cursor = 'pointer';
-        img.onclick = function() { openImageModal(this); };
-    }
-});
 
 // Back to top functionality
 window.onscroll = function() {
@@ -340,7 +288,7 @@ window.onscroll = function() {
 
 // Escape key to close modal
 document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' || e.key === 'Esc') { // 'Esc' for older browsers
+    if (e.key === 'Escape' || e.key === 'Esc') {
         const modal = document.getElementById('imageModal');
         if (modal && modal.style.display === 'block') {
             modal.style.display = 'none';
