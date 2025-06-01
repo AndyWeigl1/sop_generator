@@ -1,4 +1,4 @@
-# app/sop_builder.py
+# app/sop_builder.py - Enhanced with library drag and drop integration
 import customtkinter as ctk
 from typing import List, Optional, Dict, Tuple
 from modules.base_module import Module
@@ -14,7 +14,7 @@ from utils.project_manager import ProjectManager
 
 
 class SOPBuilderApp:
-    """Main application class for SOP Builder"""
+    """Main application class for SOP Builder with enhanced drag and drop support"""
 
     def __init__(self):
         self.root = ctk.CTk()
@@ -40,6 +40,38 @@ class SOPBuilderApp:
         # Setup
         self._setup_menu_handlers()
         self._populate_module_library()
+        self._setup_enhanced_drag_drop()
+
+    def _setup_enhanced_drag_drop(self):
+        """Set up enhanced drag and drop integration between library and canvas"""
+        # Override the main window's drop handling to integrate with canvas
+        original_is_canvas_drop_target = self.main_window._is_canvas_drop_target
+
+        def enhanced_is_canvas_drop_target(widget):
+            """Enhanced canvas drop target detection"""
+            if original_is_canvas_drop_target(widget):
+                return True
+
+            # Also check if it's a valid drop zone using canvas panel logic
+            drop_zone = self.canvas_panel._find_library_drop_zone(widget)
+            return drop_zone is not None
+
+        self.main_window._is_canvas_drop_target = enhanced_is_canvas_drop_target
+
+        # Enhance the library cleanup to also clear canvas highlights
+        original_cleanup = self.main_window._cleanup_library_drag
+
+        def enhanced_cleanup():
+            """Enhanced cleanup that also clears canvas highlights"""
+            original_cleanup()
+            # Only call canvas cleanup if canvas_panel exists and has the method
+            if hasattr(self, 'canvas_panel') and hasattr(self.canvas_panel, '_clear_library_drop_highlight'):
+                try:
+                    self.canvas_panel._clear_library_drop_highlight()
+                except Exception as e:
+                    print(f"Error clearing canvas highlights: {e}")
+
+        self.main_window._cleanup_library_drag = enhanced_cleanup
 
     def _setup_menu_handlers(self):
         """Connect menu buttons to their handlers"""
@@ -90,6 +122,9 @@ class SOPBuilderApp:
             # Mark as not modified since this is the base template
             self.set_modified(False)
 
+            # Update status to show enhanced functionality
+            self.main_window.set_status("Ready - Drag modules from left panel to canvas", "green")
+
         except Exception as e:
             messagebox.showerror("Error", f"Failed to create base template: {str(e)}")
 
@@ -98,7 +133,7 @@ class SOPBuilderApp:
         self.main_window.populate_module_library(AVAILABLE_MODULES)
 
     def add_module_to_canvas(self, module_type: str):
-        """Add a new module instance to the SOP or to a selected tab"""
+        """Add a new module instance to the SOP or to a selected tab (enhanced for drag and drop)"""
         try:
             # Create module instance
             module = ModuleFactory.create_module(module_type)
@@ -112,6 +147,9 @@ class SOPBuilderApp:
                     self.canvas_panel.add_module_to_tab_widget(tab_module, tab_name, module)
                     # Select the new module
                     self.select_module(module, parent_tab=(tab_module, tab_name))
+
+                    # Update status with success message
+                    self.main_window.set_status(f"Added {module.display_name} to '{tab_name}' tab", "green")
                 else:
                     messagebox.showerror("Error", f"Failed to add module to tab '{tab_name}'")
             else:
@@ -121,11 +159,15 @@ class SOPBuilderApp:
                 self.canvas_panel.add_module_widget(module)
                 self.select_module(module)
 
+                # Update status with success message
+                self.main_window.set_status(f"Added {module.display_name} to main canvas", "green")
+
             # Mark as modified
             self.set_modified(True)
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to add module: {str(e)}")
+            self.main_window.set_status("Failed to add module", "red")
 
     def select_module(self, module: Module, parent_tab: Optional[Tuple[TabModule, str]] = None):
         """Select a module and show its properties"""
@@ -143,11 +185,14 @@ class SOPBuilderApp:
         self.canvas_panel.highlight_module(module)
 
     def select_tab(self, tab_module: TabModule, tab_name: str):
-        """Select a specific tab within a TabModule"""
+        """Select a specific tab within a TabModule (enhanced for drag and drop feedback)"""
         self.selected_tab_context = (tab_module, tab_name)
         self.selected_module = None
         self.properties_panel.show_tab_properties(tab_module, tab_name)
         self.canvas_panel.highlight_tab(tab_module, tab_name)
+
+        # Provide visual feedback that this tab is the active target
+        self.main_window.set_status(f"Selected '{tab_name}' tab - drag modules here to add them", "lightblue")
 
     def remove_module(self, module_id: str):
         """Remove a module from the SOP (from main canvas or from a tab)"""
@@ -165,6 +210,7 @@ class SOPBuilderApp:
                             self.selected_module = None
                             self.properties_panel.clear()
                         self.set_modified(True)
+                        self.main_window.set_status(f"Removed {removed_module.display_name}", "orange")
                         return
 
         # If not in a tab, check main canvas
@@ -187,9 +233,10 @@ class SOPBuilderApp:
             # Update positions
             self._update_module_positions()
             self.set_modified(True)
+            self.main_window.set_status(f"Removed {module_to_remove.display_name}", "orange")
 
     def move_module_to_tab(self, module: Module, target_tab: TabModule, tab_name: str):
-        """Move a module from main canvas to a tab"""
+        """Move a module from main canvas to a tab (enhanced with better feedback)"""
         # Remove from main canvas
         if module in self.active_modules:
             self.active_modules.remove(module)
@@ -200,11 +247,12 @@ class SOPBuilderApp:
                 self.canvas_panel.add_module_to_tab_widget(target_tab, tab_name, module)
                 self._update_module_positions()
                 self.set_modified(True)
+                self.main_window.set_status(f"Moved {module.display_name} to '{tab_name}' tab", "green")
                 return True
         return False
 
     def move_module_from_tab(self, module: Module, source_tab: TabModule, tab_name: str):
-        """Move a module from a tab to the main canvas"""
+        """Move a module from a tab to the main canvas (enhanced with better feedback)"""
         removed_module = source_tab.remove_module_from_tab(tab_name, module.id)
         if removed_module:
             self.canvas_panel.remove_module_from_tab_widget(source_tab, tab_name, module.id)
@@ -216,6 +264,7 @@ class SOPBuilderApp:
 
             self._update_module_positions()
             self.set_modified(True)
+            self.main_window.set_status(f"Moved {module.display_name} to main canvas", "green")
             return True
         return False
 
@@ -322,12 +371,16 @@ class SOPBuilderApp:
         # Update title
         self.root.title("SOP Builder - Blank Project")
 
-    def open_project(self):
+        # Update status for blank project
+        self.main_window.set_status("Blank project - Drag modules from left panel to start building", "blue")
+
+    def open_project(self, filename_str=None):
         """Open an existing project with tab hierarchy"""
-        filename_str = filedialog.askopenfilename(
-            title="Open SOP Project",
-            filetypes=[("SOP Project", "*.sopx"), ("All Files", "*.*")]
-        )
+        if not filename_str:
+            filename_str = filedialog.askopenfilename(
+                title="Open SOP Project",
+                filetypes=[("SOP Project", "*.sopx"), ("All Files", "*.*")]
+            )
 
         if filename_str:
             try:
@@ -348,9 +401,11 @@ class SOPBuilderApp:
                 self.current_project_path = Path(filename_str)
                 self.set_modified(False)
                 self.root.title(f"SOP Builder - {self.current_project_path.name}")
+                self.main_window.set_status(f"Opened {self.current_project_path.name}", "green")
 
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to open project: {str(e)}")
+                self.main_window.set_status("Failed to open project", "red")
 
     def save_project(self, save_as=False):
         """Save current project with tab hierarchy"""
@@ -378,9 +433,11 @@ class SOPBuilderApp:
             self.project_manager.save_project(self.current_project_path, project_data)
             self.set_modified(False)
             self.root.title(f"SOP Builder - {self.current_project_path.name}")
+            self.main_window.set_status(f"Saved {self.current_project_path.name}", "green")
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save project: {str(e)}")
+            self.main_window.set_status("Failed to save project", "red")
 
     def export_to_html(self):
         """Export current SOP to HTML file with theme support"""
@@ -420,14 +477,21 @@ class SOPBuilderApp:
                     f.write(html_content)
 
                 messagebox.showinfo("Success", f"SOP exported successfully to:\n{filename}")
+                self.main_window.set_status(f"Exported to {Path(filename).name}", "green")
 
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to export HTML: {str(e)}")
+                self.main_window.set_status("Export failed", "red")
 
     def toggle_preview(self):
         """Toggle between edit and preview modes"""
         preview_mode = self.main_window.preview_toggle.get()
         self.canvas_panel.set_preview_mode(preview_mode)
+
+        if preview_mode:
+            self.main_window.set_status("Preview mode - drag and drop disabled", "orange")
+        else:
+            self.main_window.set_status("Edit mode - drag modules from left panel to canvas", "green")
 
     def set_modified(self, modified: bool):
         """Set the modified state of the project"""
