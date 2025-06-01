@@ -112,7 +112,11 @@ class TabModule(Module):
                     m.position = i
 
     def render_to_html(self) -> str:
-        """Generate HTML for tabbed content"""
+        """Generate HTML for tabbed content - simplified version for use with HTML generator"""
+        # This method is now primarily used when TabModule is rendered outside
+        # of the main HTML generator context. The HTML generator handles the
+        # full card structure.
+
         # Ensure sub_modules exist for all tabs
         for tab in self.content_data['tabs']:
             if tab not in self.sub_modules:
@@ -131,11 +135,11 @@ class TabModule(Module):
     </div>'''
 
         # Generate ALL section-content divs for ALL tabs
-        # This is important - all tabs' content must be rendered, not just the active one
+        # Note: The card structure should be handled by the HTML generator
         for i, tab in enumerate(self.content_data['tabs']):
             active_class = 'active' if i == self.content_data['active_tab'] else ''
 
-            # Get content for this tab
+            # Get content for this tab - simple version without cards
             content = ''
             if tab in self.sub_modules:
                 sorted_modules = sorted(self.sub_modules[tab], key=lambda m: m.position)
