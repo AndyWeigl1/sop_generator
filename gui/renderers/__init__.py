@@ -11,5 +11,6 @@ rather than implementation details.
 """
 
 from .module_widget_manager import ModuleWidgetManager
+from .tab_widget_manager import TabWidgetManager
 
-__all__ = ['ModuleWidgetManager']
+__all__ = ['ModuleWidgetManager', 'TabWidgetManager']
