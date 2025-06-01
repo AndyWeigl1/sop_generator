@@ -343,9 +343,12 @@ class CanvasPanel:
             if not self.drag_data:
                 return
 
-            # Update drag preview position
-            if self.drag_preview:
-                self.drag_preview.place(x=event.x_root + 10, y=event.y_root + 10)
+            # FIXED: Update drag preview position using geometry instead of place
+            if self.drag_preview and self.drag_preview.winfo_exists():
+                try:
+                    self.drag_preview.geometry(f"200x40+{event.x_root + 10}+{event.y_root + 10}")
+                except Exception as e:
+                    print(f"Error updating drag preview position: {e}")
 
             # Check for drop zones
             widget_under_cursor = self.app.root.winfo_containing(event.x_root, event.y_root)
@@ -380,19 +383,23 @@ class CanvasPanel:
 
     def _create_drag_preview(self, x: int, y: int, module_name: str):
         """Create a visual preview of the dragged module"""
-        self.drag_preview = ctk.CTkToplevel(self.app.root)
-        self.drag_preview.overrideredirect(True)
-        self.drag_preview.attributes('-alpha', 0.8)
-        self.drag_preview.geometry(f"200x40+{x + 10}+{y + 10}")
+        try:
+            self.drag_preview = ctk.CTkToplevel(self.app.root)
+            self.drag_preview.overrideredirect(True)
+            self.drag_preview.attributes('-alpha', 0.8)
+            self.drag_preview.geometry(f"200x40+{x + 10}+{y + 10}")
 
-        preview_label = ctk.CTkLabel(
-            self.drag_preview,
-            text=f"📦 {module_name}",
-            fg_color="blue",
-            corner_radius=5,
-            font=("Arial", 10, "bold")
-        )
-        preview_label.pack(fill="both", expand=True, padx=2, pady=2)
+            preview_label = ctk.CTkLabel(
+                self.drag_preview,
+                text=f"📦 {module_name}",
+                fg_color="blue",
+                corner_radius=5,
+                font=("Arial", 10, "bold")
+            )
+            preview_label.pack(fill="both", expand=True, padx=2, pady=2)
+        except Exception as e:
+            print(f"Error creating drag preview: {e}")
+            self.drag_preview = None
 
     def _update_drop_zone_highlight(self, widget_under_cursor):
         """Update visual feedback for drop zones"""
@@ -505,10 +512,18 @@ class CanvasPanel:
 
         # Add to target tab
         if target_tab_module.add_module_to_tab(tab_name, module):
-            self.add_module_to_tab_widget(target_tab_module, tab_name, module)
+            # FIXED: Don't switch tabs automatically to avoid destroying widgets
+            # Just add the widget if the tab is currently active, otherwise it will be added when the tab is switched
+            current_active_tab_index = target_tab_module.content_data.get('active_tab', 0)
+            current_active_tab = None
+            if 0 <= current_active_tab_index < len(target_tab_module.content_data['tabs']):
+                current_active_tab = target_tab_module.content_data['tabs'][current_active_tab_index]
 
-            # Switch to the target tab if not already active
-            if tab_name in target_tab_module.content_data['tabs']:
+            if current_active_tab == tab_name:
+                # The target tab is already active, add the widget directly
+                self.add_module_to_tab_widget(target_tab_module, tab_name, module)
+            else:
+                # Switch to the target tab (this will recreate all widgets including the new one)
                 target_tab_module.content_data['active_tab'] = target_tab_module.content_data['tabs'].index(tab_name)
                 self._switch_active_tab(target_tab_module, tab_name)
 
@@ -538,7 +553,11 @@ class CanvasPanel:
         self.is_dragging = False
 
         if self.drag_preview:
-            self.drag_preview.destroy()
+            try:
+                if self.drag_preview.winfo_exists():
+                    self.drag_preview.destroy()
+            except:
+                pass
             self.drag_preview = None
 
         if self.drop_zone_highlight:
@@ -571,8 +590,6 @@ class CanvasPanel:
             pass
 
         self.drag_data = None
-
-    # [Continue with the rest of the existing methods - they remain largely the same...]
 
     def _move_module_up(self, module: Module, parent_tab: Optional[Tuple[TabModule, str]] = None):
         """Move module up in its context (main canvas or within a tab)"""
@@ -655,6 +672,9 @@ class CanvasPanel:
         if not tab_container:
             return
 
+        # FIXED: Clean up widget references before destroying widgets
+        self._cleanup_tab_widget_references(tab_module.id)
+
         # Destroy existing content_frame
         for widget in tab_container.winfo_children():
             if widget.cget("fg_color") == "gray15":
@@ -725,6 +745,20 @@ class CanvasPanel:
             for nested_module in sorted(tab_module.sub_modules[tab_name], key=lambda m: m.position):
                 self.add_module_to_tab_widget(tab_module, tab_name, nested_module)
 
+    def _cleanup_tab_widget_references(self, tab_module_id: str):
+        """Clean up widget references for a tab module before recreating them"""
+        keys_to_remove = []
+        for widget_key in self.module_widgets.keys():
+            if widget_key.startswith(f"{tab_module_id}:"):
+                keys_to_remove.append(widget_key)
+
+        for key in keys_to_remove:
+            if key in self.module_widgets:
+                # Clear selection if this widget is currently selected
+                if self.selected_widget == self.module_widgets[key]:
+                    self.selected_widget = None
+                del self.module_widgets[key]
+
     def _add_new_tab(self, tab_module: TabModule):
         """Add a new tab to the TabModule"""
         dialog = ctk.CTkInputDialog(text="Enter tab name:", title="New Tab")
@@ -746,6 +780,9 @@ class CanvasPanel:
         if tab_module.id in self.tab_widgets:
             del self.tab_widgets[tab_module.id]
 
+        # FIXED: Clean up all nested widget references
+        self._cleanup_tab_widget_references(tab_module.id)
+
         # Recreate
         self.add_module_widget(tab_module, with_nested=True)
 
@@ -753,6 +790,18 @@ class CanvasPanel:
         """Refresh the content of a specific tab"""
         if tab_module.id in self.tab_widgets and tab_name in self.tab_widgets[tab_module.id]:
             container = self.tab_widgets[tab_module.id][tab_name]
+
+            # FIXED: Clean up widget references for this specific tab before destroying widgets
+            keys_to_remove = []
+            for widget_key in self.module_widgets.keys():
+                if widget_key.startswith(f"{tab_module.id}:{tab_name}:"):
+                    keys_to_remove.append(widget_key)
+
+            for key in keys_to_remove:
+                if key in self.module_widgets:
+                    if self.selected_widget == self.module_widgets[key]:
+                        self.selected_widget = None
+                    del self.module_widgets[key]
 
             # Clear existing widgets in the container
             for widget in container.winfo_children():
