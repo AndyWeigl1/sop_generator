@@ -220,7 +220,7 @@ TIPS:
 class ToolTip:
     """Custom tooltip implementation for CustomTkinter widgets"""
 
-    def __init__(self, widget: ctk.CTkBaseClass, title: str, text: str, width: int = 250):
+    def __init__(self, widget: ctk.CTkBaseClass, title: str, text: str, width: int = 350):
         self.widget = widget
         self.title = title
         self.text = text
@@ -262,14 +262,25 @@ class ToolTip:
         """Hide tooltip on click"""
         self._hide_tooltip()
 
+    def _get_root_window(self):
+        """Get the root window for proper tooltip parenting"""
+        current = self.widget
+        while current.master:
+            current = current.master
+        return current
+
     def _show_tooltip(self):
         """Display the tooltip"""
         if self.tooltip_window or not self.widget.winfo_exists():
             return
 
-        # Create tooltip window
-        self.tooltip_window = tk.Toplevel(self.widget)
+        # Get the root window for proper parenting
+        root = self._get_root_window()
+
+        # Create tooltip window with proper parent
+        self.tooltip_window = tk.Toplevel(root)
         self.tooltip_window.wm_overrideredirect(True)
+        self.tooltip_window.wm_attributes("-topmost", True)  # Keep on top
 
         # Configure appearance based on theme
         if ctk.get_appearance_mode() == "Dark":
@@ -289,73 +300,98 @@ class ToolTip:
             bg=bg_color,
             highlightthickness=0
         )
-        main_frame.pack(padx=1, pady=1)
+        main_frame.pack(padx=2, pady=2)
 
-        # Title label
+        # Title label with larger font
         if self.title:
             title_label = tk.Label(
                 main_frame,
                 text=self.title,
-                font=("Arial", 11, "bold"),
+                font=("Arial", 14, "bold"),  # Increased from 11 to 14
                 bg=bg_color,
                 fg=fg_color,
                 justify="left",
-                wraplength=self.width
+                wraplength=self.width - 20  # Account for padding
             )
-            title_label.pack(anchor="w", padx=8, pady=(6, 2))
+            title_label.pack(anchor="w", padx=12, pady=(10, 4))
 
-        # Content label
+        # Content label with larger font
         content_label = tk.Label(
             main_frame,
             text=self.text,
-            font=("Arial", 10),
+            font=("Arial", 12),  # Increased from 10 to 12
             bg=bg_color,
             fg=fg_color,
             justify="left",
-            wraplength=self.width
+            wraplength=self.width - 20  # Account for padding
         )
-        content_label.pack(anchor="w", padx=8, pady=(2, 6))
+        content_label.pack(anchor="w", padx=12, pady=(4, 10))
 
-        # Position tooltip
-        self._position_tooltip()
+        # Position tooltip after a brief delay to ensure proper sizing
+        self.tooltip_window.after(10, self._position_tooltip)
 
     def _position_tooltip(self):
         """Position tooltip near the widget"""
         if not self.tooltip_window:
             return
 
-        # Update to get final size
-        self.tooltip_window.update_idletasks()
+        try:
+            # Update to get final size
+            self.tooltip_window.update_idletasks()
 
-        # Get widget position
-        widget_x = self.widget.winfo_rootx()
-        widget_y = self.widget.winfo_rooty()
-        widget_height = self.widget.winfo_height()
+            # Get widget position in screen coordinates
+            widget_x = self.widget.winfo_rootx()
+            widget_y = self.widget.winfo_rooty()
+            widget_width = self.widget.winfo_width()
+            widget_height = self.widget.winfo_height()
 
-        # Get tooltip size
-        tooltip_width = self.tooltip_window.winfo_width()
-        tooltip_height = self.tooltip_window.winfo_height()
+            # Get tooltip size
+            tooltip_width = self.tooltip_window.winfo_reqwidth()
+            tooltip_height = self.tooltip_window.winfo_reqheight()
 
-        # Get screen size
-        screen_width = self.widget.winfo_screenwidth()
-        screen_height = self.widget.winfo_screenheight()
+            # Get screen size
+            screen_width = self.widget.winfo_screenwidth()
+            screen_height = self.widget.winfo_screenheight()
 
-        # Calculate position (prefer below widget)
-        x = widget_x
-        y = widget_y + widget_height + 5
+            # Calculate initial position (prefer to the right of widget, then below)
+            x = widget_x + widget_width + 10
+            y = widget_y
 
-        # Adjust if tooltip would go off screen
-        if x + tooltip_width > screen_width:
-            x = screen_width - tooltip_width - 5
+            # If tooltip would go off the right edge, try left side
+            if x + tooltip_width > screen_width - 10:
+                x = widget_x - tooltip_width - 10
 
-        if y + tooltip_height > screen_height:
-            # Show above widget instead
-            y = widget_y - tooltip_height - 5
+            # If still off screen, center it horizontally and put below widget
+            if x < 10:
+                x = widget_x + (widget_width - tooltip_width) // 2
+                y = widget_y + widget_height + 10
 
-        self.tooltip_window.geometry(f"+{x}+{y}")
+                # Ensure it's not off the left/right edges
+                if x < 10:
+                    x = 10
+                elif x + tooltip_width > screen_width - 10:
+                    x = screen_width - tooltip_width - 10
+
+            # If tooltip would go off the bottom, show above widget
+            if y + tooltip_height > screen_height - 10:
+                y = widget_y - tooltip_height - 10
+
+            # Final boundary check
+            if y < 10:
+                y = 10
+
+            # Set the position
+            self.tooltip_window.geometry(f"+{int(x)}+{int(y)}")
+
+        except tk.TclError:
+            # Widget may have been destroyed
+            self._hide_tooltip()
 
     def _hide_tooltip(self):
         """Hide the tooltip"""
         if self.tooltip_window:
-            self.tooltip_window.destroy()
+            try:
+                self.tooltip_window.destroy()
+            except tk.TclError:
+                pass  # Window already destroyed
             self.tooltip_window = None
