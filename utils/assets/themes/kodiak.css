@@ -33,43 +33,43 @@
         padding: 2rem;
     }
     /* Add these styles to your theme CSS files (kodiak.css and default.css) */
-    
+
     /* Media content before/after styles */
     .media-content-before,
     .media-content-after {
         margin: 1rem 0;
         color: var(--kodiak-brown, #4A3828);
     }
-    
+
     .media-content-before {
         margin-bottom: 1.5rem;
     }
-    
+
     .media-content-after {
         margin-top: 1.5rem;
     }
-    
+
     /* Format content paragraphs */
     .media-content-before p,
     .media-content-after p {
         margin: 0.5rem 0;
         line-height: 1.6;
     }
-    
+
     /* Bullet list styles */
     .media-content-before ul,
     .media-content-after ul {
         margin: 0.5rem 0;
         padding-left: 1.5rem;
     }
-    
+
     .media-content-before ul li,
     .media-content-after ul li {
         margin: 0.3rem 0;
         list-style-type: none;
         position: relative;
     }
-    
+
     .media-content-before ul li::before,
     .media-content-after ul li::before {
         content: "•";
@@ -78,7 +78,7 @@
         color: var(--kodiak-red, #B22234);
         font-weight: bold;
     }
-    
+
     /* Numbered list styles */
     .media-content-before ol,
     .media-content-after ol {
@@ -86,7 +86,7 @@
         padding-left: 1.8rem;
         counter-reset: item;
     }
-    
+
     .media-content-before ol li,
     .media-content-after ol li {
         margin: 0.3rem 0;
@@ -94,7 +94,7 @@
         position: relative;
         counter-increment: item;
     }
-    
+
     .media-content-before ol li::before,
     .media-content-after ol li::before {
         content: counter(item) ".";
@@ -104,34 +104,34 @@
         font-weight: bold;
         min-width: 1.2rem;
     }
-    
+
     /* Bold text within media content */
     .media-content-before strong,
     .media-content-after strong {
         font-weight: bold;
         color: var(--kodiak-dark-brown, #2A1810);
     }
-    
+
     /* For default theme - similar styling */
     @media (prefers-color-scheme: light) {
         .media-content-before,
         .media-content-after {
             color: var(--text-color, #2c3e50);
         }
-        
+
         .media-content-before ul li::before,
         .media-content-after ul li::before,
         .media-content-before ol li::before,
         .media-content-after ol li::before {
             color: var(--secondary-color, #3498db);
         }
-        
+
         .media-content-before strong,
         .media-content-after strong {
             color: var(--primary-color, #2c3e50);
         }
     }
-    
+
     .document-label {
         background: var(--kodiak-red);
         color: white;
@@ -624,11 +624,6 @@
         display: flex;
         align-items: center;
         gap: 0.5rem;
-    }
-
-    .issue-card h4::before {
-        content: '⚠️';
-        font-size: 1.2rem;
     }
 
     .solution {
@@ -1276,6 +1271,10 @@
         margin: 0;
     }
 
+    .step-card .issue-card {
+        border: none;
+        border-radius: 0;
+    }
     /* Issues container for issue cards */
     .issues-container {
         margin-top: 2rem;
