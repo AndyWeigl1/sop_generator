@@ -23,6 +23,9 @@ class CanvasPanel:
         self.drag_preview = None
         self.is_dragging = False
 
+        # Track widgets scheduled for destruction to prevent access
+        self.widgets_being_destroyed = set()
+
         self._setup_canvas()
 
     def _setup_canvas(self):
@@ -33,6 +36,74 @@ class CanvasPanel:
             fg_color=("gray92", "gray12")
         )
         self.modules_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+    def _safe_widget_exists(self, widget):
+        """Safely check if a widget exists and hasn't been destroyed"""
+        if widget is None:
+            return False
+        if id(widget) in self.widgets_being_destroyed:
+            return False
+        try:
+            return widget.winfo_exists()
+        except tk.TclError:
+            return False
+
+    def _safe_destroy_widget(self, widget):
+        """Safely destroy a widget with proper cleanup"""
+        if not self._safe_widget_exists(widget):
+            return
+
+        try:
+            # Mark widget as being destroyed
+            self.widgets_being_destroyed.add(id(widget))
+
+            # Clear any selection
+            if self.selected_widget == widget:
+                self.selected_widget = None
+
+            # Clear drag state if this widget is involved
+            if self.drag_data and self.drag_data.get('source_widget') == widget:
+                self._cleanup_drag()
+
+            # Unbind all events recursively
+            self._unbind_all_events(widget)
+
+            # Destroy the widget
+            widget.destroy()
+
+        except tk.TclError:
+            # Widget already destroyed
+            pass
+        finally:
+            # Remove from tracking set
+            if id(widget) in self.widgets_being_destroyed:
+                self.widgets_being_destroyed.remove(id(widget))
+
+    def _unbind_all_events(self, widget):
+        """Recursively unbind all events from a widget and its children"""
+        if not self._safe_widget_exists(widget):
+            return
+
+        try:
+            # Unbind common events
+            events_to_unbind = [
+                '<Button-1>', '<B1-Motion>', '<ButtonRelease-1>',
+                '<Enter>', '<Leave>', '<KeyRelease>', '<FocusIn>', '<FocusOut>'
+            ]
+
+            for event in events_to_unbind:
+                try:
+                    widget.unbind(event)
+                except:
+                    pass
+
+            # Recursively unbind for children
+            for child in widget.winfo_children():
+                self._unbind_all_events(child)
+
+        except tk.TclError:
+            # Widget no longer exists
+            pass
 
     def add_module_widget(self, module: Module, with_nested: bool = False):
         """Add visual representation of module"""
@@ -74,7 +145,7 @@ class CanvasPanel:
                 width=100,
                 height=25,
                 fg_color="gray30" if i == tab_module.content_data['active_tab'] else "gray40",
-                command=lambda tn=tab_name, tm=tab_module: self._on_tab_click(tm, tn)
+                command=lambda tn=tab_name, tm=tab_module: self._safe_on_tab_click(tm, tn)
             )
             tab_btn.pack(side="left", padx=2, pady=4)
 
@@ -84,7 +155,7 @@ class CanvasPanel:
             text="+",
             width=30,
             height=25,
-            command=lambda: self._add_new_tab(tab_module)
+            command=lambda: self._safe_add_new_tab(tab_module)
         )
         add_tab_btn.pack(side="left", padx=2)
 
@@ -131,11 +202,30 @@ class CanvasPanel:
             for nested_module in sorted(tab_module.sub_modules[active_tab], key=lambda m: m.position):
                 self.add_module_to_tab_widget(tab_module, active_tab, nested_module)
 
+    def _safe_on_tab_click(self, tab_module: TabModule, tab_name: str):
+        """Safely handle tab selection with widget existence checks"""
+        try:
+            if not self._safe_widget_exists(self.module_widgets.get(tab_module.id)):
+                return
+            self._on_tab_click(tab_module, tab_name)
+        except Exception as e:
+            print(f"Error in tab click: {e}")
+
+    def _safe_add_new_tab(self, tab_module: TabModule):
+        """Safely add new tab with widget existence checks"""
+        try:
+            if not self._safe_widget_exists(self.module_widgets.get(tab_module.id)):
+                return
+            self._add_new_tab(tab_module)
+        except Exception as e:
+            print(f"Error adding new tab: {e}")
+
     def _enable_tab_drop_zone(self, content_frame: ctk.CTkFrame, tab_module: TabModule, tab_name: str):
         """Enable the content frame as a drop zone for modules"""
 
         def on_click(event):
-            self._set_tab_context(tab_module, tab_name)
+            if self._safe_widget_exists(content_frame):
+                self._set_tab_context(tab_module, tab_name)
 
         # Bind click events
         content_frame.bind("<Button-1>", on_click)
@@ -163,7 +253,7 @@ class CanvasPanel:
             self._switch_active_tab(tab_module, tab_name)
 
         container = self.tab_widgets[tab_module.id].get(tab_name)
-        if not container:
+        if not container or not self._safe_widget_exists(container):
             print(f"Error: Container for tab '{tab_name}' not found after attempting to switch/create.")
             return
 
@@ -189,7 +279,11 @@ class CanvasPanel:
         if not is_top_level and parent_tab:
             tab_module_id, tab_name = parent_tab[0].id, parent_tab[1]
             if tab_module_id in self.tab_widgets and tab_name in self.tab_widgets[tab_module_id]:
-                parent_widget = self.tab_widgets[tab_module_id][tab_name]
+                container = self.tab_widgets[tab_module_id][tab_name]
+                if self._safe_widget_exists(container):
+                    parent_widget = container
+                else:
+                    parent_widget = self.modules_frame
             else:
                 parent_widget = self.modules_frame
 
@@ -209,15 +303,15 @@ class CanvasPanel:
         header_frame.pack(fill="x", padx=2, pady=2)
         header_frame.pack_propagate(False)
 
-        # Add drag handle - FIXED: Make it more visible and properly bindable
+        # Add drag handle with safer event binding
         drag_handle = ctk.CTkLabel(
             header_frame,
             text="⋮⋮",
-            font=("Arial", 16, "bold"),  # Larger font
-            text_color="white",  # More visible color
+            font=("Arial", 16, "bold"),
+            text_color="white",
             width=30,
             height=25,
-            fg_color="gray30",  # Background color to make it stand out
+            fg_color="gray30",
             corner_radius=3
         )
         drag_handle.pack(side="left", padx=(5, 5), pady=2)
@@ -239,7 +333,7 @@ class CanvasPanel:
         type_label.pack(side="left", padx=10)
 
         # Add clickable area for module selection (separate from drag)
-        type_label.bind("<Button-1>", lambda e: self._select_module_click(module, parent_tab))
+        type_label.bind("<Button-1>", lambda e: self._safe_select_module_click(module, parent_tab))
 
         # Control buttons
         controls_frame = ctk.CTkFrame(header_frame, fg_color="gray20")
@@ -253,8 +347,8 @@ class CanvasPanel:
                 text="↗",
                 width=25,
                 height=25,
-                command=lambda m=module, pt0=parent_tab[0], pt1=parent_tab[1]: self.app.move_module_from_tab(m, pt0,
-                                                                                                             pt1)
+                command=lambda m=module, pt0=parent_tab[0], pt1=parent_tab[1]: self._safe_move_module_from_tab(m, pt0,
+                                                                                                               pt1)
             )
             move_out_btn.pack(side="left", padx=2)
 
@@ -264,7 +358,7 @@ class CanvasPanel:
             text="↑",
             width=25,
             height=25,
-            command=lambda: self._move_module_up(module, parent_tab)
+            command=lambda: self._safe_move_module_up(module, parent_tab)
         )
         up_btn.pack(side="left", padx=2)
 
@@ -273,7 +367,7 @@ class CanvasPanel:
             text="↓",
             width=25,
             height=25,
-            command=lambda: self._move_module_down(module, parent_tab)
+            command=lambda: self._safe_move_module_down(module, parent_tab)
         )
         down_btn.pack(side="left", padx=2)
 
@@ -285,7 +379,7 @@ class CanvasPanel:
             height=25,
             fg_color="darkred",
             hover_color="red",
-            command=lambda mid=module.id: self.app.remove_module(mid)
+            command=lambda mid=module.id: self._safe_remove_module(mid)
         )
         delete_btn.pack(side="left", padx=2)
 
@@ -298,23 +392,54 @@ class CanvasPanel:
 
         return module_frame
 
-    def _select_module_click(self, module: Module, parent_tab: Optional[Tuple[TabModule, str]] = None):
-        """Handle module selection clicks (separate from drag)"""
-        if not self.is_dragging:
-            self.app.select_module(module, parent_tab)
+    def _safe_select_module_click(self, module: Module, parent_tab: Optional[Tuple[TabModule, str]] = None):
+        """Handle module selection clicks (separate from drag) with safety checks"""
+        try:
+            if not self.is_dragging:
+                self.app.select_module(module, parent_tab)
+        except Exception as e:
+            print(f"Error in module selection: {e}")
+
+    def _safe_move_module_from_tab(self, module: Module, tab_module: TabModule, tab_name: str):
+        """Safely move module from tab to main canvas"""
+        try:
+            self.app.move_module_from_tab(module, tab_module, tab_name)
+        except Exception as e:
+            print(f"Error moving module from tab: {e}")
+
+    def _safe_move_module_up(self, module: Module, parent_tab: Optional[Tuple[TabModule, str]] = None):
+        """Safely move module up"""
+        try:
+            self._move_module_up(module, parent_tab)
+        except Exception as e:
+            print(f"Error moving module up: {e}")
+
+    def _safe_move_module_down(self, module: Module, parent_tab: Optional[Tuple[TabModule, str]] = None):
+        """Safely move module down"""
+        try:
+            self._move_module_down(module, parent_tab)
+        except Exception as e:
+            print(f"Error moving module down: {e}")
+
+    def _safe_remove_module(self, module_id: str):
+        """Safely remove module"""
+        try:
+            self.app.remove_module(module_id)
+        except Exception as e:
+            print(f"Error removing module: {e}")
 
     def _enable_drag_drop(self, frame: ctk.CTkFrame, module: Module,
                           parent_tab: Optional[Tuple[TabModule, str]] = None):
-        """Enable drag and drop functionality for a module frame"""
+        """Enable drag and drop functionality for a module frame with safety checks"""
 
         # Get the drag handle
         drag_handle = getattr(frame, '_drag_handle', None)
-        if not drag_handle:
-            print(f"Warning: No drag handle found for module {module.id}")
+        if not drag_handle or not self._safe_widget_exists(drag_handle):
+            print(f"Warning: No valid drag handle found for module {module.id}")
             return
 
         def start_drag(event):
-            if self.preview_mode:
+            if self.preview_mode or not self._safe_widget_exists(frame) or not self._safe_widget_exists(drag_handle):
                 return
 
             self.is_dragging = True
@@ -330,56 +455,84 @@ class CanvasPanel:
             self._create_drag_preview(event.x_root, event.y_root, module.display_name)
 
             # Bind drag motion to the root window to track mouse movement
-            self.app.root.bind('<B1-Motion>', on_drag_motion)
-            self.app.root.bind('<ButtonRelease-1>', end_drag)
-
-            # Make frame semi-transparent during drag
-            frame.configure(fg_color=("gray25", "gray25"))
-
-            # Change cursor
-            drag_handle.configure(cursor="hand2")
-
-        def on_drag_motion(event):
-            if not self.drag_data:
+            try:
+                self.app.root.bind('<B1-Motion>', on_drag_motion)
+                self.app.root.bind('<ButtonRelease-1>', end_drag)
+            except tk.TclError:
+                self._cleanup_drag()
                 return
 
-            # FIXED: Update drag preview position using geometry instead of place
-            if self.drag_preview and self.drag_preview.winfo_exists():
+            # Make frame semi-transparent during drag
+            if self._safe_widget_exists(frame):
+                try:
+                    frame.configure(fg_color=("gray25", "gray25"))
+                except tk.TclError:
+                    pass
+
+            # Change cursor
+            if self._safe_widget_exists(drag_handle):
+                try:
+                    drag_handle.configure(cursor="hand2")
+                except tk.TclError:
+                    pass
+
+        def on_drag_motion(event):
+            if not self.drag_data or not self.is_dragging:
+                return
+
+            # Update drag preview position
+            if self.drag_preview and self._safe_widget_exists(self.drag_preview):
                 try:
                     self.drag_preview.geometry(f"200x40+{event.x_root + 10}+{event.y_root + 10}")
-                except Exception as e:
-                    print(f"Error updating drag preview position: {e}")
+                except Exception:
+                    pass
 
             # Check for drop zones
-            widget_under_cursor = self.app.root.winfo_containing(event.x_root, event.y_root)
-            self._update_drop_zone_highlight(widget_under_cursor)
+            try:
+                widget_under_cursor = self.app.root.winfo_containing(event.x_root, event.y_root)
+                self._update_drop_zone_highlight(widget_under_cursor)
+            except tk.TclError:
+                pass
 
         def end_drag(event):
             if not self.drag_data:
                 return
 
             # Find drop target
-            drop_target = self.app.root.winfo_containing(event.x_root, event.y_root)
-            self._handle_drop(drop_target, event.x_root, event.y_root)
+            try:
+                drop_target = self.app.root.winfo_containing(event.x_root, event.y_root)
+                self._handle_drop(drop_target, event.x_root, event.y_root)
+            except tk.TclError:
+                pass
 
             # Cleanup
             self._cleanup_drag()
 
-        # FIXED: Bind specifically to the drag handle only
-        drag_handle.bind('<Button-1>', start_drag)
-        drag_handle.configure(cursor="hand2")
+        # Bind specifically to the drag handle only with safety checks
+        if self._safe_widget_exists(drag_handle):
+            try:
+                drag_handle.bind('<Button-1>', start_drag)
+                drag_handle.configure(cursor="hand2")
 
-        # Add hover effect to make it clear it's draggable
-        def on_enter(event):
-            if not self.is_dragging:
-                drag_handle.configure(fg_color="gray40")
+                # Add hover effect to make it clear it's draggable
+                def on_enter(event):
+                    if not self.is_dragging and self._safe_widget_exists(drag_handle):
+                        try:
+                            drag_handle.configure(fg_color="gray40")
+                        except tk.TclError:
+                            pass
 
-        def on_leave(event):
-            if not self.is_dragging:
-                drag_handle.configure(fg_color="gray30")
+                def on_leave(event):
+                    if not self.is_dragging and self._safe_widget_exists(drag_handle):
+                        try:
+                            drag_handle.configure(fg_color="gray30")
+                        except tk.TclError:
+                            pass
 
-        drag_handle.bind('<Enter>', on_enter)
-        drag_handle.bind('<Leave>', on_leave)
+                drag_handle.bind('<Enter>', on_enter)
+                drag_handle.bind('<Leave>', on_leave)
+            except tk.TclError:
+                pass
 
     def _create_drag_preview(self, x: int, y: int, module_name: str):
         """Create a visual preview of the dragged module"""
@@ -404,29 +557,43 @@ class CanvasPanel:
     def _update_drop_zone_highlight(self, widget_under_cursor):
         """Update visual feedback for drop zones"""
         # Clear previous highlight
-        if self.drop_zone_highlight:
+        if self.drop_zone_highlight and self._safe_widget_exists(self.drop_zone_highlight):
             try:
                 self.drop_zone_highlight.configure(fg_color=self.drop_zone_highlight._original_color)
-            except:
+            except (tk.TclError, AttributeError):
                 pass
             self.drop_zone_highlight = None
 
         # Find drop zone
         drop_zone = self._find_drop_zone(widget_under_cursor)
 
-        if drop_zone:
+        if drop_zone and self._safe_widget_exists(drop_zone):
             # Store original color and highlight
             if not hasattr(drop_zone, '_original_color'):
-                drop_zone._original_color = drop_zone.cget('fg_color')
+                try:
+                    drop_zone._original_color = drop_zone.cget('fg_color')
+                except tk.TclError:
+                    drop_zone._original_color = "gray15"
 
-            drop_zone.configure(fg_color="lightblue")
-            self.drop_zone_highlight = drop_zone
+            try:
+                drop_zone.configure(fg_color="lightblue")
+                self.drop_zone_highlight = drop_zone
+            except tk.TclError:
+                pass
 
     def _find_drop_zone(self, widget) -> Optional[ctk.CTkFrame]:
         """Find the nearest valid drop zone widget"""
         current = widget
 
         while current:
+            # Check if widget still exists
+            if not self._safe_widget_exists(current):
+                try:
+                    current = current.master
+                    continue
+                except (tk.TclError, AttributeError):
+                    break
+
             # Check if this widget has drop zone info
             if hasattr(current, '_drop_zone_info'):
                 return current
@@ -439,6 +606,8 @@ class CanvasPanel:
             if isinstance(current, (ctk.CTkFrame, ctk.CTkScrollableFrame)):
                 for tab_id, tab_containers in self.tab_widgets.items():
                     for tab_name, container in tab_containers.items():
+                        if not self._safe_widget_exists(container):
+                            continue
                         if current == container or self._is_child_of(current, container):
                             # Add drop zone info if not present
                             if not hasattr(current, '_drop_zone_info'):
@@ -455,20 +624,23 @@ class CanvasPanel:
 
             try:
                 current = current.master
-            except:
+            except (tk.TclError, AttributeError):
                 break
 
         return None
 
     def _is_child_of(self, child_widget, parent_widget) -> bool:
         """Check if child_widget is a descendant of parent_widget"""
+        if not self._safe_widget_exists(child_widget) or not self._safe_widget_exists(parent_widget):
+            return False
+
         current = child_widget
         while current:
             if current == parent_widget:
                 return True
             try:
                 current = current.master
-            except:
+            except (tk.TclError, AttributeError):
                 break
         return False
 
@@ -512,8 +684,7 @@ class CanvasPanel:
 
         # Add to target tab
         if target_tab_module.add_module_to_tab(tab_name, module):
-            # FIXED: Don't switch tabs automatically to avoid destroying widgets
-            # Just add the widget if the tab is currently active, otherwise it will be added when the tab is switched
+            # Check if target tab is currently active
             current_active_tab_index = target_tab_module.content_data.get('active_tab', 0)
             current_active_tab = None
             if 0 <= current_active_tab_index < len(target_tab_module.content_data['tabs']):
@@ -549,44 +720,45 @@ class CanvasPanel:
                 self.app.set_modified(True)
 
     def _cleanup_drag(self):
-        """Clean up drag and drop state"""
+        """Clean up drag and drop state with safety checks"""
         self.is_dragging = False
 
         if self.drag_preview:
             try:
-                if self.drag_preview.winfo_exists():
+                if self._safe_widget_exists(self.drag_preview):
                     self.drag_preview.destroy()
             except:
                 pass
             self.drag_preview = None
 
-        if self.drop_zone_highlight:
+        if self.drop_zone_highlight and self._safe_widget_exists(self.drop_zone_highlight):
             try:
                 if hasattr(self.drop_zone_highlight, '_original_color'):
                     self.drop_zone_highlight.configure(fg_color=self.drop_zone_highlight._original_color)
                 else:
                     self.drop_zone_highlight.configure(fg_color="gray15")
-            except:
+            except tk.TclError:
                 pass
             self.drop_zone_highlight = None
 
         if self.drag_data and self.drag_data.get('source_widget'):
             # Restore original appearance
             source_widget = self.drag_data['source_widget']
-            try:
-                # Determine if it's a top-level or nested module
-                if hasattr(source_widget, '_parent_tab') and source_widget._parent_tab:
-                    source_widget.configure(fg_color="gray18")  # nested module color
-                else:
-                    source_widget.configure(fg_color="gray15")  # top-level module color
-            except:
-                pass
+            if self._safe_widget_exists(source_widget):
+                try:
+                    # Determine if it's a top-level or nested module
+                    if hasattr(source_widget, '_parent_tab') and source_widget._parent_tab:
+                        source_widget.configure(fg_color="gray18")  # nested module color
+                    else:
+                        source_widget.configure(fg_color="gray15")  # top-level module color
+                except tk.TclError:
+                    pass
 
         # Unbind root window events
         try:
             self.app.root.unbind('<B1-Motion>')
             self.app.root.unbind('<ButtonRelease-1>')
-        except:
+        except tk.TclError:
             pass
 
         self.drag_data = None
@@ -657,105 +829,153 @@ class CanvasPanel:
             self.app.set_modified(True)
 
     def _switch_active_tab(self, tab_module: TabModule, tab_name: str):
-        """Switch the visible tab content"""
+        """Switch the visible tab content with improved safety"""
         # Find the parent_frame of the tab_module
         if tab_module.id not in self.module_widgets:
             return
+
         tab_module_main_frame = self.module_widgets[tab_module.id]
+        if not self._safe_widget_exists(tab_module_main_frame):
+            return
 
         # Find tab_container within tab_module_main_frame
         tab_container = None
-        for child in tab_module_main_frame.winfo_children():
-            if isinstance(child, ctk.CTkFrame) and child.cget("fg_color") == "gray20":
-                tab_container = child
-                break
-        if not tab_container:
+        try:
+            for child in tab_module_main_frame.winfo_children():
+                if isinstance(child, ctk.CTkFrame) and self._safe_widget_exists(child):
+                    try:
+                        if child.cget("fg_color") == "gray20":
+                            tab_container = child
+                            break
+                    except tk.TclError:
+                        continue
+        except tk.TclError:
             return
 
-        # FIXED: Clean up widget references before destroying widgets
+        if not tab_container or not self._safe_widget_exists(tab_container):
+            return
+
+        # Clean up widget references before destroying widgets
         self._cleanup_tab_widget_references(tab_module.id)
 
-        # Destroy existing content_frame
-        for widget in tab_container.winfo_children():
-            if widget.cget("fg_color") == "gray15":
-                widget.destroy()
+        # Safely destroy existing content_frame
+        widgets_to_destroy = []
+        try:
+            for widget in tab_container.winfo_children():
+                if self._safe_widget_exists(widget):
+                    try:
+                        if widget.cget("fg_color") == "gray15":
+                            widgets_to_destroy.append(widget)
+                    except tk.TclError:
+                        pass
+        except tk.TclError:
+            pass
+
+        for widget in widgets_to_destroy:
+            self._safe_destroy_widget(widget)
 
         # Recreate tab buttons
         tab_selector_frame = None
-        for child in tab_container.winfo_children():
-            if isinstance(child, ctk.CTkFrame) and child.cget("fg_color") == "gray25":
-                tab_selector_frame = child
-                break
+        try:
+            for child in tab_container.winfo_children():
+                if isinstance(child, ctk.CTkFrame) and self._safe_widget_exists(child):
+                    try:
+                        if child.cget("fg_color") == "gray25":
+                            tab_selector_frame = child
+                            break
+                    except tk.TclError:
+                        continue
+        except tk.TclError:
+            pass
 
-        if tab_selector_frame:
-            for widget in tab_selector_frame.winfo_children():
-                widget.destroy()
+        if tab_selector_frame and self._safe_widget_exists(tab_selector_frame):
+            # Clear existing buttons
+            buttons_to_destroy = []
+            try:
+                for widget in tab_selector_frame.winfo_children():
+                    if self._safe_widget_exists(widget):
+                        buttons_to_destroy.append(widget)
+            except tk.TclError:
+                pass
 
-            for i, tn in enumerate(tab_module.content_data['tabs']):
-                is_active = (tn == tab_name)
-                tab_btn = ctk.CTkButton(
+            for widget in buttons_to_destroy:
+                self._safe_destroy_widget(widget)
+
+            # Create new buttons
+            try:
+                for i, tn in enumerate(tab_module.content_data['tabs']):
+                    is_active = (tn == tab_name)
+                    tab_btn = ctk.CTkButton(
+                        tab_selector_frame,
+                        text=tn,
+                        width=100,
+                        height=25,
+                        fg_color="gray30" if is_active else "gray40",
+                        command=lambda t_name=tn, tm=tab_module: self._safe_on_tab_click(tm, t_name)
+                    )
+                    tab_btn.pack(side="left", padx=2, pady=4)
+
+                add_tab_btn = ctk.CTkButton(
                     tab_selector_frame,
-                    text=tn,
-                    width=100,
+                    text="+",
+                    width=30,
                     height=25,
-                    fg_color="gray30" if is_active else "gray40",
-                    command=lambda t_name=tn, tm=tab_module: self._on_tab_click(tm, t_name)
+                    command=lambda tm=tab_module: self._safe_add_new_tab(tm)
                 )
-                tab_btn.pack(side="left", padx=2, pady=4)
-
-            add_tab_btn = ctk.CTkButton(
-                tab_selector_frame,
-                text="+",
-                width=30,
-                height=25,
-                command=lambda tm=tab_module: self._add_new_tab(tm)
-            )
-            add_tab_btn.pack(side="left", padx=2)
+                add_tab_btn.pack(side="left", padx=2)
+            except tk.TclError:
+                pass
 
         # Create new content frame for the selected tab
-        content_frame = ctk.CTkFrame(tab_container, fg_color="gray15")
-        content_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        if self._safe_widget_exists(tab_container):
+            try:
+                content_frame = ctk.CTkFrame(tab_container, fg_color="gray15")
+                content_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # Enable drop zone for this tab
-        self._enable_tab_drop_zone(content_frame, tab_module, tab_name)
+                # Enable drop zone for this tab
+                self._enable_tab_drop_zone(content_frame, tab_module, tab_name)
 
-        # Header label for the tab content
-        if tab_name in tab_module.sub_modules and tab_module.sub_modules[tab_name]:
-            header_text = f"'{tab_name}' tab content ({len(tab_module.sub_modules[tab_name])} modules)"
-        else:
-            header_text = f"'{tab_name}' tab - Drop modules here or click to select"
+                # Header label for the tab content
+                if tab_name in tab_module.sub_modules and tab_module.sub_modules[tab_name]:
+                    header_text = f"'{tab_name}' tab content ({len(tab_module.sub_modules[tab_name])} modules)"
+                else:
+                    header_text = f"'{tab_name}' tab - Drop modules here or click to select"
 
-        header_label = ctk.CTkLabel(
-            content_frame,
-            text=header_text,
-            font=("Arial", 12, "bold"),
-            text_color="gray"
-        )
-        header_label.pack(pady=(10, 5))
+                header_label = ctk.CTkLabel(
+                    content_frame,
+                    text=header_text,
+                    font=("Arial", 12, "bold"),
+                    text_color="gray"
+                )
+                header_label.pack(pady=(10, 5))
 
-        # Container for modules in this tab
-        modules_container = ctk.CTkScrollableFrame(content_frame, fg_color="gray15")
-        modules_container.pack(fill="both", expand=True, padx=5, pady=5)
+                # Container for modules in this tab
+                modules_container = ctk.CTkScrollableFrame(content_frame, fg_color="gray15")
+                modules_container.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # Store the new content frame
-        self.tab_widgets[tab_module.id][tab_name] = modules_container
+                # Store the new content frame
+                self.tab_widgets[tab_module.id][tab_name] = modules_container
 
-        # Re-add modules for this tab
-        if tab_name in tab_module.sub_modules:
-            for nested_module in sorted(tab_module.sub_modules[tab_name], key=lambda m: m.position):
-                self.add_module_to_tab_widget(tab_module, tab_name, nested_module)
+                # Re-add modules for this tab
+                if tab_name in tab_module.sub_modules:
+                    for nested_module in sorted(tab_module.sub_modules[tab_name], key=lambda m: m.position):
+                        self.add_module_to_tab_widget(tab_module, tab_name, nested_module)
+
+            except tk.TclError as e:
+                print(f"Error creating tab content frame: {e}")
 
     def _cleanup_tab_widget_references(self, tab_module_id: str):
         """Clean up widget references for a tab module before recreating them"""
         keys_to_remove = []
-        for widget_key in self.module_widgets.keys():
+        for widget_key in list(self.module_widgets.keys()):  # Create a copy of keys
             if widget_key.startswith(f"{tab_module_id}:"):
                 keys_to_remove.append(widget_key)
 
         for key in keys_to_remove:
             if key in self.module_widgets:
+                widget = self.module_widgets[key]
                 # Clear selection if this widget is currently selected
-                if self.selected_widget == self.module_widgets[key]:
+                if self.selected_widget == widget:
                     self.selected_widget = None
                 del self.module_widgets[key]
 
@@ -771,46 +991,67 @@ class CanvasPanel:
 
     def _refresh_tab_module(self, tab_module: TabModule):
         """Refresh the entire tab module widget"""
+        # Clean up all references first
+        self._cleanup_tab_widget_references(tab_module.id)
+
         # Remove and recreate the widget
         if tab_module.id in self.module_widgets:
-            self.module_widgets[tab_module.id].destroy()
+            widget = self.module_widgets[tab_module.id]
+            if self._safe_widget_exists(widget):
+                self._safe_destroy_widget(widget)
             del self.module_widgets[tab_module.id]
 
         # Clean up tab widget references
         if tab_module.id in self.tab_widgets:
             del self.tab_widgets[tab_module.id]
 
-        # FIXED: Clean up all nested widget references
-        self._cleanup_tab_widget_references(tab_module.id)
-
         # Recreate
-        self.add_module_widget(tab_module, with_nested=True)
+        try:
+            self.add_module_widget(tab_module, with_nested=True)
+        except Exception as e:
+            print(f"Error refreshing tab module: {e}")
 
     def _refresh_tab_content(self, tab_module: TabModule, tab_name: str):
         """Refresh the content of a specific tab"""
-        if tab_module.id in self.tab_widgets and tab_name in self.tab_widgets[tab_module.id]:
-            container = self.tab_widgets[tab_module.id][tab_name]
+        if tab_module.id not in self.tab_widgets or tab_name not in self.tab_widgets[tab_module.id]:
+            return
 
-            # FIXED: Clean up widget references for this specific tab before destroying widgets
-            keys_to_remove = []
-            for widget_key in self.module_widgets.keys():
-                if widget_key.startswith(f"{tab_module.id}:{tab_name}:"):
-                    keys_to_remove.append(widget_key)
+        container = self.tab_widgets[tab_module.id][tab_name]
+        if not self._safe_widget_exists(container):
+            return
 
-            for key in keys_to_remove:
-                if key in self.module_widgets:
-                    if self.selected_widget == self.module_widgets[key]:
-                        self.selected_widget = None
-                    del self.module_widgets[key]
+        # Clean up widget references for this specific tab before destroying widgets
+        keys_to_remove = []
+        for widget_key in list(self.module_widgets.keys()):
+            if widget_key.startswith(f"{tab_module.id}:{tab_name}:"):
+                keys_to_remove.append(widget_key)
 
-            # Clear existing widgets in the container
+        for key in keys_to_remove:
+            if key in self.module_widgets:
+                widget = self.module_widgets[key]
+                if self.selected_widget == widget:
+                    self.selected_widget = None
+                del self.module_widgets[key]
+
+        # Clear existing widgets in the container
+        widgets_to_destroy = []
+        try:
             for widget in container.winfo_children():
-                widget.destroy()
+                if self._safe_widget_exists(widget):
+                    widgets_to_destroy.append(widget)
+        except tk.TclError:
+            pass
 
-            # Re-add modules in correct order
-            if tab_name in tab_module.sub_modules:
-                for module in sorted(tab_module.sub_modules.get(tab_name, []), key=lambda m: m.position):
+        for widget in widgets_to_destroy:
+            self._safe_destroy_widget(widget)
+
+        # Re-add modules in correct order
+        if tab_name in tab_module.sub_modules:
+            for module in sorted(tab_module.sub_modules.get(tab_name, []), key=lambda m: m.position):
+                try:
                     self.add_module_to_tab_widget(tab_module, tab_name, module)
+                except Exception as e:
+                    print(f"Error adding module to tab widget: {e}")
 
     def remove_module_from_tab_widget(self, tab_module: TabModule, tab_name: str, module_id: str):
         """Remove a module widget from a tab"""
@@ -822,7 +1063,7 @@ class CanvasPanel:
             if self.selected_widget == widget:
                 self.selected_widget = None
 
-            widget.destroy()
+            self._safe_destroy_widget(widget)
             del self.module_widgets[widget_key]
 
     def highlight_tab(self, tab_module: TabModule, tab_name: str):
@@ -860,21 +1101,24 @@ class CanvasPanel:
     def highlight_module(self, module: Module):
         """Highlight the selected module"""
         # Remove previous highlight
-        if self.selected_widget:
+        if self.selected_widget and self._safe_widget_exists(self.selected_widget):
             try:
                 self.selected_widget.configure(border_color=("gray15", "gray15"))
-            except Exception:
+            except tk.TclError:
+                pass
+            finally:
                 self.selected_widget = None
 
         # Add highlight to selected module
         if module.id in self.module_widgets:
             widget = self.module_widgets[module.id]
-            try:
-                widget.configure(border_color="blue")
-                self.selected_widget = widget
-            except Exception:
-                del self.module_widgets[module.id]
-                self.selected_widget = None
+            if self._safe_widget_exists(widget):
+                try:
+                    widget.configure(border_color="blue")
+                    self.selected_widget = widget
+                except tk.TclError:
+                    if module.id in self.module_widgets:
+                        del self.module_widgets[module.id]
 
     def remove_module_widget(self, module_id: str):
         """Remove module widget from canvas"""
@@ -885,31 +1129,31 @@ class CanvasPanel:
             if self.selected_widget == widget:
                 self.selected_widget = None
 
-            widget.destroy()
+            self._safe_destroy_widget(widget)
             del self.module_widgets[module_id]
 
             # Also clean up any tab-related widgets for this module
             keys_to_remove = [key for key in self.module_widgets.keys() if key.startswith(f"{module_id}:")]
             for key in keys_to_remove:
-                if self.module_widgets[key] == self.selected_widget:
+                widget = self.module_widgets[key]
+                if self.selected_widget == widget:
                     self.selected_widget = None
-                self.module_widgets[key].destroy()
+                self._safe_destroy_widget(widget)
                 del self.module_widgets[key]
 
     def clear(self):
         """Clear all modules from canvas"""
         self.selected_widget = None
 
-        # Destroy all widgets
-        for widget in self.module_widgets.values():
-            try:
-                widget.destroy()
-            except Exception:
-                pass
+        # Destroy all widgets safely
+        widgets_to_destroy = list(self.module_widgets.values())
+        for widget in widgets_to_destroy:
+            self._safe_destroy_widget(widget)
 
         # Clear all tracking dictionaries
         self.module_widgets.clear()
         self.tab_widgets.clear()
+        self.widgets_being_destroyed.clear()
 
     def refresh_order(self):
         """Refresh the visual order of modules"""
@@ -917,35 +1161,56 @@ class CanvasPanel:
 
         for module in modules:
             if module.id in self.module_widgets:
-                self.module_widgets[module.id].pack_forget()
-                self.module_widgets[module.id].pack(fill="x", padx=5, pady=5)
+                widget = self.module_widgets[module.id]
+                if self._safe_widget_exists(widget):
+                    try:
+                        widget.pack_forget()
+                        widget.pack(fill="x", padx=5, pady=5)
+                    except tk.TclError:
+                        pass
 
     def update_module_preview(self, module: Module):
         """Update the preview for a specific module"""
         if module.id in self.module_widgets:
             widget = self.module_widgets[module.id]
+            if not self._safe_widget_exists(widget):
+                return
 
             # Find and update the preview label
-            for child in widget.winfo_children():
-                if isinstance(child, ctk.CTkFrame):
-                    for grandchild in child.winfo_children():
-                        if isinstance(grandchild, ctk.CTkLabel) and grandchild.cget("font") == ("Arial", 11):
-                            grandchild.configure(text=self._get_preview_text(module))
-                            break
+            try:
+                for child in widget.winfo_children():
+                    if isinstance(child, ctk.CTkFrame) and self._safe_widget_exists(child):
+                        for grandchild in child.winfo_children():
+                            if (isinstance(grandchild, ctk.CTkLabel) and
+                                    self._safe_widget_exists(grandchild) and
+                                    grandchild.cget("font") == ("Arial", 11)):
+                                try:
+                                    grandchild.configure(text=self._get_preview_text(module))
+                                except tk.TclError:
+                                    pass
+                                break
+            except tk.TclError:
+                pass
 
     def set_preview_mode(self, enabled: bool):
         """Toggle between edit and preview modes"""
         self.preview_mode = enabled
 
         for widget in self.module_widgets.values():
-            if enabled:
-                for child in widget.winfo_children():
-                    if isinstance(child, ctk.CTkFrame):
-                        for grandchild in child.winfo_children():
-                            if isinstance(grandchild, ctk.CTkFrame):
-                                grandchild.pack_forget()
-            else:
-                self.refresh_order()
+            if not self._safe_widget_exists(widget):
+                continue
+
+            try:
+                if enabled:
+                    for child in widget.winfo_children():
+                        if isinstance(child, ctk.CTkFrame) and self._safe_widget_exists(child):
+                            for grandchild in child.winfo_children():
+                                if isinstance(grandchild, ctk.CTkFrame) and self._safe_widget_exists(grandchild):
+                                    grandchild.pack_forget()
+                else:
+                    self.refresh_order()
+            except tk.TclError:
+                pass
 
     def _move_module(self, module_id: str, direction: int):
         """Move module up or down on main canvas"""
