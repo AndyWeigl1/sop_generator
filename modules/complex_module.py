@@ -1,4 +1,4 @@
-# modules/complex_modules.py
+# modules/complex_module.py
 from modules.base_module import Module
 from typing import Dict, Any, List, Optional
 import uuid
@@ -113,10 +113,6 @@ class TabModule(Module):
 
     def render_to_html(self) -> str:
         """Generate HTML for tabbed content - simplified version for use with HTML generator"""
-        # This method is now primarily used when TabModule is rendered outside
-        # of the main HTML generator context. The HTML generator handles the
-        # full card structure.
-
         # Ensure sub_modules exist for all tabs
         for tab in self.content_data['tabs']:
             if tab not in self.sub_modules:
@@ -135,7 +131,6 @@ class TabModule(Module):
     </div>'''
 
         # Generate ALL section-content divs for ALL tabs
-        # Note: The card structure should be handled by the HTML generator
         for i, tab in enumerate(self.content_data['tabs']):
             active_class = 'active' if i == self.content_data['active_tab'] else ''
 
@@ -178,8 +173,10 @@ class TabModule(Module):
         return base_dict
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], module_registry: Dict[str, type] = None):
+    def from_dict(cls, data: Dict[str, Any]):
         """Deserialize module from dictionary including sub-modules"""
+        # Note: This method is not used in the current implementation
+        # as deserialization is handled by ProjectManager
         module = cls()
         module.id = data['id']
         module.position = data['position']
@@ -192,19 +189,42 @@ class TabModule(Module):
             if tab not in module.tab_ids:
                 module.tab_ids[tab] = str(uuid.uuid4())
 
-        # Deserialize sub-modules if module_registry is provided
-        if 'sub_modules' in data and module_registry:
-            from modules.module_factory import ModuleFactory
-            for tab_name, modules_data in data['sub_modules'].items():
-                module.sub_modules[tab_name] = []
-                for module_data in modules_data:
-                    # Recreate the module using the factory
-                    sub_module = ModuleFactory.create_module(module_data['module_type'])
-                    # Restore its data
-                    sub_module.id = module_data['id']
-                    sub_module.position = module_data['position']
-                    sub_module.content_data = module_data['content_data']
-                    sub_module.custom_styles = module_data.get('custom_styles', {})
-                    module.sub_modules[tab_name].append(sub_module)
-
         return module
+
+    def get_module_count_by_tab(self) -> Dict[str, int]:
+        """Get the number of modules in each tab"""
+        counts = {}
+        for tab_name in self.content_data['tabs']:
+            counts[tab_name] = len(self.sub_modules.get(tab_name, []))
+        return counts
+
+    def move_module_between_tabs(self, module_id: str, from_tab: str, to_tab: str) -> bool:
+        """Move a module from one tab to another within this TabModule"""
+        removed_module = self.remove_module_from_tab(from_tab, module_id)
+        if removed_module and self.add_module_to_tab(to_tab, removed_module):
+            return True
+        return False
+
+    def validate_tab_structure(self) -> bool:
+        """Validate the internal consistency of the tab structure"""
+        # Check that all tabs in content_data have corresponding entries
+        for tab_name in self.content_data['tabs']:
+            if tab_name not in self.sub_modules:
+                self.sub_modules[tab_name] = []
+            if tab_name not in self.tab_ids:
+                self.tab_ids[tab_name] = str(uuid.uuid4())
+
+        # Check that sub_modules and tab_ids don't have extra entries
+        valid_tabs = set(self.content_data['tabs'])
+
+        # Remove orphaned sub_modules
+        orphaned_sub_modules = set(self.sub_modules.keys()) - valid_tabs
+        for orphan in orphaned_sub_modules:
+            del self.sub_modules[orphan]
+
+        # Remove orphaned tab_ids
+        orphaned_tab_ids = set(self.tab_ids.keys()) - valid_tabs
+        for orphan in orphaned_tab_ids:
+            del self.tab_ids[orphan]
+
+        return True
