@@ -1,11 +1,12 @@
 # gui/canvas_panel.py
 import customtkinter as ctk
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Any
 from modules.base_module import Module
 from modules.complex_module import TabModule
+import tkinter as tk
 
 class CanvasPanel:
-    """Central panel for arranging modules"""
+    """Central panel for arranging modules with drag and drop support"""
 
     def __init__(self, parent, app_instance):
         self.parent = parent
@@ -14,6 +15,11 @@ class CanvasPanel:
         self.tab_widgets: Dict[str, Dict[str, ctk.CTkFrame]] = {} # tab_module_id -> {tab_name -> frame}
         self.selected_widget: Optional[ctk.CTkFrame] = None
         self.preview_mode = False
+        
+        # Drag and drop state
+        self.drag_data = None
+        self.drop_zone_highlight = None
+        self.drag_preview = None
 
         self._setup_canvas()
 
@@ -22,7 +28,7 @@ class CanvasPanel:
         # Create a frame to hold all module widgets
         self.modules_frame = ctk.CTkFrame(
             self.parent,
-            fg_color=("gray92", "gray12")  # Changed from "transparent"
+            fg_color=("gray92", "gray12")
         )
         self.modules_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
@@ -39,13 +45,12 @@ class CanvasPanel:
         if isinstance(module, TabModule):
             self._create_tab_content_areas(module, module_frame, with_nested)
 
-        # Make frame clickable
-        self._bind_module_events(module_frame, module)
-
+        # Make frame draggable
+        self._enable_drag_drop(module_frame, module)
 
     def _create_tab_content_areas(self, tab_module: TabModule, parent_frame: ctk.CTkFrame,
                                 with_nested: bool = False):
-        """Create visual areas for tab content"""
+        """Create visual areas for tab content with proper module display"""
         # Create a frame for tab contents
         tab_container = ctk.CTkFrame(parent_frame, fg_color="gray20")
         tab_container.pack(fill="both", expand=True, padx=5, pady=(0, 5))
@@ -81,45 +86,40 @@ class CanvasPanel:
         )
         add_tab_btn.pack(side="left", padx=2)
 
-
         # Create content frame for active tab
         active_tab_index = tab_module.content_data['active_tab']
         if 0 <= active_tab_index < len(tab_module.content_data['tabs']):
             active_tab = tab_module.content_data['tabs'][active_tab_index]
         else:
-            # Handle cases where active_tab_index might be out of bounds
-            # or if tabs list is empty. Default to first tab or handle error.
             if tab_module.content_data['tabs']:
                 active_tab = tab_module.content_data['tabs'][0]
                 tab_module.content_data['active_tab'] = 0
             else:
-                # No tabs exist, cannot create content frame for active tab yet
                 return
-
 
         content_frame = ctk.CTkFrame(tab_container, fg_color="gray15")
         content_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # Create drop zone for adding modules to this tab
-        drop_zone = ctk.CTkFrame(content_frame, fg_color="gray18", height=40)
-        drop_zone.pack(fill="x", padx=5, pady=5)
+        # Enable drop zone for this tab
+        self._enable_tab_drop_zone(content_frame, tab_module, active_tab)
 
-        drop_label = ctk.CTkLabel(
-            drop_zone,
-            text=f"+ Add modules to '{active_tab}' tab",
-            text_color="gray",
-            cursor="hand2"
+        # Header label for the tab content
+        if active_tab in tab_module.sub_modules and tab_module.sub_modules[active_tab]:
+            header_text = f"'{active_tab}' tab content ({len(tab_module.sub_modules[active_tab])} modules)"
+        else:
+            header_text = f"'{active_tab}' tab - Drop modules here or click to select"
+        
+        header_label = ctk.CTkLabel(
+            content_frame,
+            text=header_text,
+            font=("Arial", 12, "bold"),
+            text_color="gray"
         )
-        drop_label.pack(pady=10)
-
-        # Make drop zone clickable
-        drop_zone.bind("<Button-1>", lambda e, tm=tab_module, at=active_tab: self._on_tab_dropzone_click(tm, at))
-        drop_label.bind("<Button-1>", lambda e, tm=tab_module, at=active_tab: self._on_tab_dropzone_click(tm, at))
-
+        header_label.pack(pady=(10, 5))
 
         # Container for modules in this tab
-        modules_container = ctk.CTkFrame(content_frame, fg_color="gray15")
-        modules_container.pack(fill="both", expand=True, padx=5)
+        modules_container = ctk.CTkScrollableFrame(content_frame, fg_color="gray15")
+        modules_container.pack(fill="both", expand=True, padx=5, pady=5)
 
         # Store the content frame
         self.tab_widgets[tab_module.id][active_tab] = modules_container
@@ -129,6 +129,37 @@ class CanvasPanel:
             for nested_module in sorted(tab_module.sub_modules[active_tab], key=lambda m: m.position):
                 self.add_module_to_tab_widget(tab_module, active_tab, nested_module)
 
+    def _enable_tab_drop_zone(self, content_frame: ctk.CTkFrame, tab_module: TabModule, tab_name: str):
+        """Enable the content frame as a drop zone for modules"""
+        def on_drag_enter(event):
+            if self.drag_data and self.drag_data.get('module'):
+                content_frame.configure(fg_color="lightblue")
+                return "copy"
+        
+        def on_drag_leave(event):
+            content_frame.configure(fg_color="gray15")
+        
+        def on_drop(event):
+            content_frame.configure(fg_color="gray15")
+            if self.drag_data and self.drag_data.get('module'):
+                dragged_module = self.drag_data['module']
+                self._handle_drop_on_tab(dragged_module, tab_module, tab_name)
+        
+        # Bind drop events
+        content_frame.bind("<Button-1>", lambda e: self._set_tab_context(tab_module, tab_name))
+        
+        # Store drop zone info for drag detection
+        content_frame._drop_zone_info = {
+            'type': 'tab',
+            'tab_module': tab_module,
+            'tab_name': tab_name
+        }
+
+    def _set_tab_context(self, tab_module: TabModule, tab_name: str):
+        """Set the selected tab context for adding new modules"""
+        self.app.selected_tab_context = (tab_module, tab_name)
+        self.app.select_tab(tab_module, tab_name)
+
     def add_module_to_tab_widget(self, tab_module: TabModule, tab_name: str, module: Module):
         """Add a module widget to a specific tab"""
         if tab_module.id not in self.tab_widgets:
@@ -136,12 +167,10 @@ class CanvasPanel:
 
         # Get or create the container for this tab
         if tab_name not in self.tab_widgets[tab_module.id]:
-            # Tab doesn't have a visual container yet, create it
-            self._switch_active_tab(tab_module, tab_name)  # This needs to ensure the container is made
+            self._switch_active_tab(tab_module, tab_name)
 
         container = self.tab_widgets[tab_module.id].get(tab_name)
         if not container:
-            # If _switch_active_tab doesn't create it or it's still missing
             print(f"Error: Container for tab '{tab_name}' not found after attempting to switch/create.")
             return
 
@@ -153,8 +182,8 @@ class CanvasPanel:
         widget_key = f"{tab_module.id}:{tab_name}:{module.id}"
         self.module_widgets[widget_key] = module_frame
 
-        # Bind events
-        self._bind_module_events(module_frame, module, parent_tab=(tab_module, tab_name))
+        # Enable drag and drop for this module
+        self._enable_drag_drop(module_frame, module, parent_tab=(tab_module, tab_name))
 
     def _create_module_frame(self, module: Module, is_top_level: bool = True,
                              parent_tab: Optional[Tuple[TabModule, str]] = None) -> ctk.CTkFrame:
@@ -169,7 +198,6 @@ class CanvasPanel:
             if tab_module_id in self.tab_widgets and tab_name in self.tab_widgets[tab_module_id]:
                 parent_widget = self.tab_widgets[tab_module_id][tab_name]
             else:
-                print(f"Error: Parent container for tab {tab_name} of module {tab_module_id} not found.")
                 parent_widget = self.modules_frame
 
         module_frame = ctk.CTkFrame(
@@ -179,10 +207,24 @@ class CanvasPanel:
             border_color=border_color
         )
 
+        # Store module reference in the frame
+        module_frame._module = module
+        module_frame._parent_tab = parent_tab
+
         # Create header with module type and controls
         header_frame = ctk.CTkFrame(module_frame, fg_color="gray20", height=30)
         header_frame.pack(fill="x", padx=2, pady=2)
         header_frame.pack_propagate(False)
+
+        # Add drag handle
+        drag_handle = ctk.CTkLabel(
+            header_frame,
+            text="⋮⋮",
+            font=("Arial", 12, "bold"),
+            text_color="gray",
+            width=20
+        )
+        drag_handle.pack(side="left", padx=(5, 0))
 
         # Add indentation for nested modules
         if not is_top_level:
@@ -209,13 +251,11 @@ class CanvasPanel:
                 text="↗",
                 width=25,
                 height=25,
-                command=lambda m=module, pt0=parent_tab[0], pt1=parent_tab[1]: self.app.move_module_from_tab(m, pt0,
-                                                                                                             pt1)
+                command=lambda m=module, pt0=parent_tab[0], pt1=parent_tab[1]: self.app.move_module_from_tab(m, pt0, pt1)
             )
             move_out_btn.pack(side="left", padx=2)
 
         # Standard controls
-        # Move up button - FIXED: pass module.id and handle parent_tab context properly
         up_btn = ctk.CTkButton(
             controls_frame,
             text="↑",
@@ -225,7 +265,6 @@ class CanvasPanel:
         )
         up_btn.pack(side="left", padx=2)
 
-        # Move down button - FIXED: pass module.id and handle parent_tab context properly
         down_btn = ctk.CTkButton(
             controls_frame,
             text="↓",
@@ -256,6 +295,252 @@ class CanvasPanel:
 
         return module_frame
 
+    def _enable_drag_drop(self, frame: ctk.CTkFrame, module: Module, parent_tab: Optional[Tuple[TabModule, str]] = None):
+        """Enable drag and drop functionality for a module frame"""
+        
+        def start_drag(event):
+            if self.preview_mode:
+                return
+                
+            self.drag_data = {
+                'module': module,
+                'parent_tab': parent_tab,
+                'start_x': event.x_root,
+                'start_y': event.y_root,
+                'source_widget': frame
+            }
+            
+            # Create drag preview
+            self._create_drag_preview(event.x_root, event.y_root, module.display_name)
+            
+            # Start drag motion tracking
+            frame.bind('<B1-Motion>', on_drag_motion)
+            frame.bind('<ButtonRelease-1>', end_drag)
+            
+            # Make frame semi-transparent during drag
+            frame.configure(fg_color=("gray25", "gray25"))
+
+        def on_drag_motion(event):
+            if not self.drag_data:
+                return
+                
+            # Update drag preview position
+            if self.drag_preview:
+                self.drag_preview.place(x=event.x_root + 10, y=event.y_root + 10)
+            
+            # Check for drop zones using the root window
+            widget_under_cursor = self.app.root.winfo_containing(event.x_root, event.y_root)
+            self._update_drop_zone_highlight(widget_under_cursor)
+
+        def end_drag(event):
+            if not self.drag_data:
+                return
+                
+            # Find drop target using the root window
+            drop_target = self.app.root.winfo_containing(event.x_root, event.y_root)
+            self._handle_drop(drop_target, event.x_root, event.y_root)
+            
+            # Cleanup
+            self._cleanup_drag()
+
+        # Bind to the frame itself for drag functionality
+        # But make sure we don't interfere with button clicks
+        def on_mouse_down(event):
+            # Don't start drag if clicking on a button
+            if event.widget.winfo_class() in ['Button', 'CTkButton']:
+                return
+            start_drag(event)
+        
+        frame.bind('<Button-1>', on_mouse_down)
+        
+        # Also bind to the drag handle specifically
+        for child in frame.winfo_children():
+            if isinstance(child, ctk.CTkFrame):  # header frame
+                for grandchild in child.winfo_children():
+                    if isinstance(grandchild, ctk.CTkLabel) and grandchild.cget("text") == "⋮⋮":
+                        grandchild.bind('<Button-1>', start_drag)
+                        grandchild.configure(cursor="hand2")
+
+    def _create_drag_preview(self, x: int, y: int, module_name: str):
+        """Create a visual preview of the dragged module"""
+        self.drag_preview = ctk.CTkToplevel(self.app.root)
+        self.drag_preview.overrideredirect(True)
+        self.drag_preview.attributes('-alpha', 0.8)
+        self.drag_preview.geometry(f"200x40+{x+10}+{y+10}")
+        
+        preview_label = ctk.CTkLabel(
+            self.drag_preview,
+            text=f"📦 {module_name}",
+            fg_color="blue",
+            corner_radius=5,
+            font=("Arial", 10, "bold")
+        )
+        preview_label.pack(fill="both", expand=True, padx=2, pady=2)
+
+    def _update_drop_zone_highlight(self, widget_under_cursor):
+        """Update visual feedback for drop zones"""
+        # Clear previous highlight
+        if self.drop_zone_highlight:
+            try:
+                self.drop_zone_highlight.configure(fg_color=self.drop_zone_highlight._original_color)
+            except:
+                pass
+            self.drop_zone_highlight = None
+
+        # Find drop zone
+        drop_zone = self._find_drop_zone(widget_under_cursor)
+        
+        if drop_zone:
+            # Store original color and highlight
+            if not hasattr(drop_zone, '_original_color'):
+                drop_zone._original_color = drop_zone.cget('fg_color')
+            
+            drop_zone.configure(fg_color="lightblue")
+            self.drop_zone_highlight = drop_zone
+
+    def _find_drop_zone(self, widget) -> Optional[ctk.CTkFrame]:
+        """Find the nearest valid drop zone widget"""
+        current = widget
+        
+        while current:
+            # Check if this widget has drop zone info
+            if hasattr(current, '_drop_zone_info'):
+                return current
+            
+            # Check if this is the main modules frame (for main canvas drops)
+            if current == self.modules_frame:
+                return current
+                
+            # Check if this is a tab content frame
+            if isinstance(current, (ctk.CTkFrame, ctk.CTkScrollableFrame)):
+                for tab_id, tab_containers in self.tab_widgets.items():
+                    for tab_name, container in tab_containers.items():
+                        if current == container or self._is_child_of(current, container):
+                            # Add drop zone info if not present
+                            if not hasattr(current, '_drop_zone_info'):
+                                # Find the tab module
+                                for module in self.app.active_modules:
+                                    if isinstance(module, TabModule) and module.id == tab_id:
+                                        current._drop_zone_info = {
+                                            'type': 'tab',
+                                            'tab_module': module,
+                                            'tab_name': tab_name
+                                        }
+                                        break
+                            return current
+            
+            current = current.master
+        
+        return None
+
+    def _is_child_of(self, child_widget, parent_widget) -> bool:
+        """Check if child_widget is a descendant of parent_widget"""
+        current = child_widget
+        while current:
+            if current == parent_widget:
+                return True
+            current = current.master
+        return False
+
+    def _handle_drop(self, drop_target, x: int, y: int):
+        """Handle the drop operation"""
+        if not self.drag_data:
+            return
+            
+        dragged_module = self.drag_data['module']
+        source_parent_tab = self.drag_data.get('parent_tab')
+        
+        drop_zone = self._find_drop_zone(drop_target)
+        
+        if not drop_zone:
+            return  # Invalid drop
+        
+        # Determine drop action
+        if hasattr(drop_zone, '_drop_zone_info'):
+            drop_info = drop_zone._drop_zone_info
+            if drop_info['type'] == 'tab':
+                self._handle_drop_on_tab(dragged_module, drop_info['tab_module'], drop_info['tab_name'])
+        elif drop_zone == self.modules_frame:
+            self._handle_drop_on_main_canvas(dragged_module)
+
+    def _handle_drop_on_tab(self, module: Module, target_tab_module: TabModule, tab_name: str):
+        """Handle dropping a module onto a tab"""
+        source_parent_tab = self.drag_data.get('parent_tab')
+        
+        # Remove from source
+        if source_parent_tab:
+            # Moving from another tab
+            source_tab_module, source_tab_name = source_parent_tab
+            removed_module = source_tab_module.remove_module_from_tab(source_tab_name, module.id)
+            if removed_module:
+                self.remove_module_from_tab_widget(source_tab_module, source_tab_name, module.id)
+        else:
+            # Moving from main canvas
+            if module in self.app.active_modules:
+                self.app.active_modules.remove(module)
+                self.remove_module_widget(module.id)
+        
+        # Add to target tab
+        if target_tab_module.add_module_to_tab(tab_name, module):
+            self.add_module_to_tab_widget(target_tab_module, tab_name, module)
+            
+            # Switch to the target tab if not already active
+            if tab_name in target_tab_module.content_data['tabs']:
+                target_tab_module.content_data['active_tab'] = target_tab_module.content_data['tabs'].index(tab_name)
+                self._switch_active_tab(target_tab_module, tab_name)
+            
+            self.app.set_modified(True)
+
+    def _handle_drop_on_main_canvas(self, module: Module):
+        """Handle dropping a module onto the main canvas"""
+        source_parent_tab = self.drag_data.get('parent_tab')
+        
+        if source_parent_tab:
+            # Moving from a tab to main canvas
+            source_tab_module, source_tab_name = source_parent_tab
+            removed_module = source_tab_module.remove_module_from_tab(source_tab_name, module.id)
+            if removed_module:
+                self.remove_module_from_tab_widget(source_tab_module, source_tab_name, module.id)
+                
+                # Add to main canvas
+                removed_module.position = len(self.app.active_modules)
+                self.app.active_modules.append(removed_module)
+                self.add_module_widget(removed_module)
+                
+                self.app._update_module_positions()
+                self.app.set_modified(True)
+
+    def _cleanup_drag(self):
+        """Clean up drag and drop state"""
+        if self.drag_preview:
+            self.drag_preview.destroy()
+            self.drag_preview = None
+        
+        if self.drop_zone_highlight:
+            try:
+                if hasattr(self.drop_zone_highlight, '_original_color'):
+                    self.drop_zone_highlight.configure(fg_color=self.drop_zone_highlight._original_color)
+                else:
+                    self.drop_zone_highlight.configure(fg_color="gray15")
+            except:
+                pass
+            self.drop_zone_highlight = None
+        
+        if self.drag_data and self.drag_data.get('source_widget'):
+            # Restore original appearance
+            source_widget = self.drag_data['source_widget']
+            try:
+                # Determine if it's a top-level or nested module
+                if hasattr(source_widget, '_parent_tab') and source_widget._parent_tab:
+                    source_widget.configure(fg_color="gray18")  # nested module color
+                else:
+                    source_widget.configure(fg_color="gray15")  # top-level module color
+            except:
+                pass
+        
+        self.drag_data = None
+
+    # [Rest of the existing methods remain the same...]
     def _move_module_up(self, module: Module, parent_tab: Optional[Tuple[TabModule, str]] = None):
         """Move module up in its context (main canvas or within a tab)"""
         if parent_tab:
@@ -318,37 +603,31 @@ class CanvasPanel:
         # Update the active tab in the module
         if tab_name in tab_module.content_data['tabs']:
             tab_module.content_data['active_tab'] = tab_module.content_data['tabs'].index(tab_name)
-            # self.app.select_tab(tab_module, tab_name) # Assuming app has such a method
             self._switch_active_tab(tab_module, tab_name)
-            self.app.set_modified(True)  # Assuming app has such a method
+            self.app.set_modified(True)
 
     def _switch_active_tab(self, tab_module: TabModule, tab_name: str):
         """Switch the visible tab content"""
-        # This would update the visual display to show the selected tab's content
-        # For simplicity, we'll just update the drop zone label
-        # In a full implementation, you'd hide/show different content containers
-
-        # Find the parent_frame of the tab_module (its main widget)
+        # Find the parent_frame of the tab_module
         if tab_module.id not in self.module_widgets:
             return
         tab_module_main_frame = self.module_widgets[tab_module.id]
 
         # Find tab_container within tab_module_main_frame
-        # This assumes a certain structure created in _create_tab_content_areas
         tab_container = None
         for child in tab_module_main_frame.winfo_children():
-            if isinstance(child, ctk.CTkFrame) and child.cget("fg_color") == "gray20":  # Heuristic
+            if isinstance(child, ctk.CTkFrame) and child.cget("fg_color") == "gray20":
                 tab_container = child
                 break
-        if not tab_container: return
+        if not tab_container: 
+            return
 
-        # Destroy existing content_frame (the one with fg_color="gray15")
+        # Destroy existing content_frame
         for widget in tab_container.winfo_children():
-            # Avoid destroying the tab_selector_frame
-            if widget.cget("fg_color") == "gray15":  # Heuristic for content_frame
+            if widget.cget("fg_color") == "gray15":
                 widget.destroy()
 
-        # Recreate tab buttons to update their colors
+        # Recreate tab buttons
         tab_selector_frame = None
         for child in tab_container.winfo_children():
             if isinstance(child, ctk.CTkFrame) and child.cget("fg_color") == "gray25":
@@ -357,7 +636,7 @@ class CanvasPanel:
 
         if tab_selector_frame:
             for widget in tab_selector_frame.winfo_children():
-                widget.destroy()  # Clear old buttons
+                widget.destroy()
 
             for i, tn in enumerate(tab_module.content_data['tabs']):
                 is_active = (tn == tab_name)
@@ -384,22 +663,26 @@ class CanvasPanel:
         content_frame = ctk.CTkFrame(tab_container, fg_color="gray15")
         content_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # Create drop zone
-        drop_zone = ctk.CTkFrame(content_frame, fg_color="gray18", height=40)
-        drop_zone.pack(fill="x", padx=5, pady=5)
-        drop_label = ctk.CTkLabel(
-            drop_zone,
-            text=f"+ Add modules to '{tab_name}' tab",
-            text_color="gray",
-            cursor="hand2"
+        # Enable drop zone for this tab
+        self._enable_tab_drop_zone(content_frame, tab_module, tab_name)
+
+        # Header label for the tab content
+        if tab_name in tab_module.sub_modules and tab_module.sub_modules[tab_name]:
+            header_text = f"'{tab_name}' tab content ({len(tab_module.sub_modules[tab_name])} modules)"
+        else:
+            header_text = f"'{tab_name}' tab - Drop modules here or click to select"
+        
+        header_label = ctk.CTkLabel(
+            content_frame,
+            text=header_text,
+            font=("Arial", 12, "bold"),
+            text_color="gray"
         )
-        drop_label.pack(pady=10)
-        drop_zone.bind("<Button-1>", lambda e, tm=tab_module, tn=tab_name: self._on_tab_dropzone_click(tm, tn))
-        drop_label.bind("<Button-1>", lambda e, tm=tab_module, tn=tab_name: self._on_tab_dropzone_click(tm, tn))
+        header_label.pack(pady=(10, 5))
 
         # Container for modules in this tab
-        modules_container = ctk.CTkFrame(content_frame, fg_color="gray15")
-        modules_container.pack(fill="both", expand=True, padx=5)
+        modules_container = ctk.CTkScrollableFrame(content_frame, fg_color="gray15")
+        modules_container.pack(fill="both", expand=True, padx=5, pady=5)
 
         # Store the new content frame
         self.tab_widgets[tab_module.id][tab_name] = modules_container
@@ -411,30 +694,13 @@ class CanvasPanel:
 
     def _add_new_tab(self, tab_module: TabModule):
         """Add a new tab to the TabModule"""
-        # Simple dialog to get tab name
         dialog = ctk.CTkInputDialog(text="Enter tab name:", title="New Tab")
         tab_name = dialog.get_input()
 
         if tab_name and tab_name not in tab_module.content_data['tabs']:
-            tab_module.add_tab(tab_name) # Assuming TabModule has this method
-            # Refresh the tab module widget
+            tab_module.add_tab(tab_name)
             self._refresh_tab_module(tab_module)
-            self.app.set_modified(True) # Assuming app has such a method
-
-    def _bind_module_events(self, frame: ctk.CTkFrame, module: Module,
-                            parent_tab: Optional[Tuple[TabModule, str]] = None):
-        """Bind click events to module frame"""
-        # Capture current values for lambda
-        current_module = module
-        current_parent_tab = parent_tab
-
-        frame.bind("<Button-1>", lambda e: self.app.select_module(current_module, current_parent_tab))
-        for child in frame.winfo_children():
-            # Only bind to direct children that are frames, avoid binding to all sub-widgets like buttons
-            if isinstance(child, ctk.CTkFrame):
-                child.bind("<Button-1>", lambda e: self.app.select_module(current_module, current_parent_tab))
-            # Deeper binding might be needed if clicks on labels etc. should also select
-            # but be careful not to override other specific bindings (like on buttons)
+            self.app.set_modified(True)
 
     def _refresh_tab_module(self, tab_module: TabModule):
         """Refresh the entire tab module widget"""
@@ -443,7 +709,7 @@ class CanvasPanel:
             self.module_widgets[tab_module.id].destroy()
             del self.module_widgets[tab_module.id]
 
-        # Clean up tab widget references (the actual widgets are already destroyed)
+        # Clean up tab widget references
         if tab_module.id in self.tab_widgets:
             del self.tab_widgets[tab_module.id]
 
@@ -479,19 +745,8 @@ class CanvasPanel:
 
     def highlight_tab(self, tab_module: TabModule, tab_name: str):
         """Highlight a selected tab"""
-        # Update visual indication of selected tab
         if tab_module.id in self.module_widgets:
-            # self.highlight_module(tab_module) # Assuming this method exists and highlights the main module frame
-            pass # Main module frame highlighting might be handled by select_module
-        # Additional tab-specific highlighting could be added here
-        # e.g., changing the style of the tab button itself via _switch_active_tab or similar logic
-
-    def _on_tab_dropzone_click(self, tab_module: TabModule, tab_name: str):
-        """Handle click on tab drop zone to add modules"""
-        # self.app.select_tab(tab_module, tab_name) # Assuming app has such a method
-        print(f"Dropzone clicked for tab: {tab_name} in module: {tab_module.id}")
-        # Here you would typically open a dialog or module selection menu
-        # and then call self.app.add_module_to_tab(tab_module, tab_name, selected_new_module)
+            pass
 
     def _get_preview_text(self, module: Module) -> str:
         """Get preview text for module"""
@@ -514,17 +769,19 @@ class CanvasPanel:
             return f"❗ {module.content_data.get('issue_title', 'Issue')}"
         elif module.module_type == 'footer':
             return f"📍 Footer - {module.content_data.get('organization', 'Organization')}"
+        elif module.module_type == 'tabs':
+            tab_count = len(module.content_data.get('tabs', []))
+            return f"📑 Tab Section ({tab_count} tabs)"
         else:
             return f"{module.display_name}"
 
     def highlight_module(self, module: Module):
         """Highlight the selected module"""
-        # Remove previous highlight (with error handling for destroyed widgets)
+        # Remove previous highlight
         if self.selected_widget:
             try:
                 self.selected_widget.configure(border_color=("gray15", "gray15"))
             except Exception:
-                # Widget was destroyed, clear the reference
                 self.selected_widget = None
 
         # Add highlight to selected module
@@ -534,7 +791,6 @@ class CanvasPanel:
                 widget.configure(border_color="blue")
                 self.selected_widget = widget
             except Exception:
-                # Widget is invalid, remove from tracking
                 del self.module_widgets[module.id]
                 self.selected_widget = None
 
@@ -560,7 +816,6 @@ class CanvasPanel:
 
     def clear(self):
         """Clear all modules from canvas"""
-        # Clear selection first
         self.selected_widget = None
 
         # Destroy all widgets
@@ -568,7 +823,6 @@ class CanvasPanel:
             try:
                 widget.destroy()
             except Exception:
-                # Widget already destroyed, ignore
                 pass
 
         # Clear all tracking dictionaries
@@ -577,10 +831,8 @@ class CanvasPanel:
 
     def refresh_order(self):
         """Refresh the visual order of modules"""
-        # Get all modules from app sorted by position
         modules = sorted(self.app.active_modules, key=lambda m: m.position)
 
-        # Repack all widgets in correct order
         for module in modules:
             if module.id in self.module_widgets:
                 self.module_widgets[module.id].pack_forget()
@@ -603,23 +855,18 @@ class CanvasPanel:
         """Toggle between edit and preview modes"""
         self.preview_mode = enabled
 
-        # Update visual state of all widgets
         for widget in self.module_widgets.values():
             if enabled:
-                # Hide controls in preview mode
                 for child in widget.winfo_children():
                     if isinstance(child, ctk.CTkFrame):
-                        # Find header frame with controls
                         for grandchild in child.winfo_children():
                             if isinstance(grandchild, ctk.CTkFrame):
                                 grandchild.pack_forget()
             else:
-                # Show controls in edit mode
                 self.refresh_order()
 
     def _move_module(self, module_id: str, direction: int):
         """Move module up or down on main canvas"""
-        # Find module position
         module_index = None
         for i, module in enumerate(self.app.active_modules):
             if module.id == module_id:
@@ -630,31 +877,3 @@ class CanvasPanel:
             new_index = module_index + direction
             if 0 <= new_index < len(self.app.active_modules):
                 self.app.reorder_modules(module_id, new_index)
-
-    def _enable_drag(self, widget: ctk.CTkFrame, module: Module):
-        """Enable drag functionality for module widget"""
-        widget.bind("<Button-1>", lambda e: self._start_drag(e, module))
-        widget.bind("<B1-Motion>", self._on_drag)
-        widget.bind("<ButtonRelease-1>", self._stop_drag)
-
-    def _start_drag(self, event, module: Module):
-        """Start dragging a module"""
-        self.drag_data = {
-            "module": module,
-            "start_y": event.y_root,
-            "widget": event.widget
-        }
-
-    def _on_drag(self, event):
-        """Handle drag motion"""
-        # Visual feedback during drag could be added here
-        pass
-
-    def _stop_drag(self, event):
-        """Stop dragging and reorder if needed"""
-        if hasattr(self, 'drag_data'):
-            # Calculate new position based on mouse position
-            # This is a simplified version - you can enhance it
-            del self.drag_data
-
-
