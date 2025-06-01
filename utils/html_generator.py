@@ -45,13 +45,7 @@ class HTMLGenerator:
     def generate_html(self, modules: List[Module], title: str = "Standard Operating Procedure",
                       output_dir: Optional[Path] = None, embed_theme: bool = False) -> str:
         """
-        Generate complete HTML from modules with proper hierarchical rendering
-
-        Args:
-            modules: List of top-level modules only (nested modules are handled by their parents)
-            title: Document title
-            output_dir: Directory where HTML will be saved (for relative CSS paths)
-            embed_theme: If True, embed CSS inline; if False, link to external file
+        Generate complete HTML from modules with proper hierarchical rendering and card structure
         """
         # Sort top-level modules by position
         sorted_modules = sorted(modules, key=lambda m: m.position)
@@ -63,7 +57,7 @@ class HTMLGenerator:
         header_modules = []
         tab_modules = []
         footer_modules = []
-        other_modules = []  # Modules that don't belong in tabs
+        other_modules = []
 
         for module in sorted_modules:
             if module.module_type == 'header':
@@ -90,12 +84,11 @@ class HTMLGenerator:
             # If we have tabs, ALL non-header/footer content goes inside content-wrapper
             content_html += '\n\n <div class="content-wrapper">'
 
-            # For each tab module, render the complete tab structure
+            # For each tab module, render with proper card structure
             for tab_module in tab_modules:
                 if isinstance(tab_module, TabModule):
-                    # The TabModule's render_to_html should create the complete tab structure
-                    # including the tabs div and all section-content divs
-                    content_html += f'\n {tab_module.render_to_html()}'
+                    # Generate the complete tab structure with cards
+                    content_html += f'\n {self._render_tab_module_with_cards(tab_module)}'
                     rendered_module_ids.add(tab_module.id)
 
                     # Mark all nested modules as rendered
@@ -105,11 +98,16 @@ class HTMLGenerator:
             # Close content-wrapper
             content_html += '\n </div>'
         else:
-            # No tabs - render other modules directly
-            for module in other_modules:
-                if module.id not in rendered_module_ids:
-                    content_html += f'\n {module.render_to_html()}'
-                    rendered_module_ids.add(module.id)
+            # No tabs - render other modules directly with card structure
+            if other_modules:
+                content_html += '\n\n<div class="steps-container">'
+                step_number = 1
+                for module in other_modules:
+                    if module.id not in rendered_module_ids:
+                        content_html += f'\n {self._wrap_module_in_card(module, step_number)}'
+                        rendered_module_ids.add(module.id)
+                        step_number += 1
+                content_html += '\n</div>'
 
         # Add footer modules (outside content-wrapper)
         for module in footer_modules:
@@ -147,6 +145,131 @@ class HTMLGenerator:
         )
 
         return html
+
+    def _render_tab_module_with_cards(self, tab_module: 'TabModule') -> str:
+        """Generate HTML for TabModule with proper card structure"""
+        # Ensure sub_modules exist for all tabs
+        for tab in tab_module.content_data['tabs']:
+            if tab not in tab_module.sub_modules:
+                tab_module.sub_modules[tab] = []
+
+        # Generate tab buttons
+        tab_buttons = ''
+        for i, tab in enumerate(tab_module.content_data['tabs']):
+            active_class = 'active' if i == tab_module.content_data['active_tab'] else ''
+            tab_buttons += f'<button class="tab {active_class}">{tab}</button>\n'
+
+        # Start building the HTML
+        html = f'''
+    <div class="tabs">
+        {tab_buttons}
+    </div>'''
+
+        # Generate ALL section-content divs for ALL tabs with card structure
+        for i, tab in enumerate(tab_module.content_data['tabs']):
+            active_class = 'active' if i == tab_module.content_data['active_tab'] else ''
+
+            # Get modules for this tab and organize them
+            tab_modules = []
+            if tab in tab_module.sub_modules:
+                tab_modules = sorted(tab_module.sub_modules[tab], key=lambda m: m.position)
+
+            # Group modules by sections (disclaimer + section_title + following modules)
+            sections = self._group_modules_by_sections(tab_modules)
+
+            # Generate content for this tab
+            content = ''
+            for section in sections:
+                content += self._render_section_with_cards(section)
+
+            # If no content, show placeholder
+            if not content:
+                content = '<p style="color: gray; text-align: center;">No content in this tab yet.</p>'
+
+            # Add the section-content div
+            html += f'''
+    <div class="section-content {active_class}">
+        {content}
+    </div>'''
+
+        return html
+
+    def _render_section_with_cards(self, section_modules: List[Module]) -> str:
+        """Render a section with proper card structure"""
+        if not section_modules:
+            return ''
+
+        html = ''
+        step_number = 1
+        steps_container_open = False
+
+        for module in section_modules:
+            if module.module_type == 'disclaimer':
+                # Disclaimers go outside steps-container
+                if steps_container_open:
+                    html += '\n</div>'  # Close steps-container
+                    steps_container_open = False
+                html += f'\n{module.render_to_html()}'
+
+            elif module.module_type == 'section_title':
+                # Section titles go outside steps-container
+                if steps_container_open:
+                    html += '\n</div>'  # Close steps-container
+                    steps_container_open = False
+                html += f'\n{module.render_to_html()}'
+
+            else:
+                # Other modules go inside steps-container as cards
+                if not steps_container_open:
+                    html += '\n<div class="steps-container">'
+                    steps_container_open = True
+                    step_number = 1  # Reset step numbering for each new container
+
+                html += f'\n{self._wrap_module_in_card(module, step_number)}'
+                step_number += 1
+
+        # Close steps-container if it's open
+        if steps_container_open:
+            html += '\n</div>'
+
+        return html
+
+    def _wrap_module_in_card(self, module: Module, step_number: int) -> str:
+        """Wrap a module's content in a step card"""
+        module_content = module.render_to_html()
+
+        # For modules that already have card styling (like step_card), use them as-is
+        if module.module_type == 'step_card':
+            return module_content
+
+        # For other modules, wrap them in a card
+        return f'''
+    <div class="step-card">
+        <div class="step-number">{step_number}</div>
+        {module_content}
+    </div>'''
+
+    def _group_modules_by_sections(self, modules: List[Module]) -> List[List[Module]]:
+        """Group modules into sections based on section_title modules"""
+        if not modules:
+            return []
+
+        sections = []
+        current_section = []
+
+        for module in modules:
+            if module.module_type == 'section_title' and current_section:
+                # Start a new section, but first close the current one
+                sections.append(current_section)
+                current_section = [module]
+            else:
+                current_section.append(module)
+
+        # Add the last section
+        if current_section:
+            sections.append(current_section)
+
+        return sections
 
     def _load_theme_css(self) -> str:
         """Load CSS content from theme file"""
