@@ -546,19 +546,20 @@ class ExportDialog:
         self.result = False
         self.filename = None
         self.embed_css = False
+        self.embed_media_base64 = False  # New attribute
         self.selected_theme = "kodiak"
 
         # Create dialog window
         self.dialog = ctk.CTkToplevel(parent)
         self.dialog.title("Export SOP")
-        self.dialog.geometry("500x300")
+        self.dialog.geometry("500x350")  # Increased height for new option
         self.dialog.transient(parent)
         self.dialog.grab_set()
 
         # Center the dialog
         self.dialog.update_idletasks()
         x = (self.dialog.winfo_screenwidth() // 2) - (500 // 2)
-        y = (self.dialog.winfo_screenheight() // 2) - (300 // 2)
+        y = (self.dialog.winfo_screenheight() // 2) - (350 // 2)
         self.dialog.geometry(f"+{x}+{y}")
 
         self._create_widgets(available_themes)
@@ -589,14 +590,24 @@ class ExportDialog:
             text="Embed CSS in HTML file (for standalone use)",
             variable=self.embed_var
         )
-        embed_check.pack(pady=(0, 20))
+        embed_check.pack(pady=(0, 10))
 
-        # Info label
+        # Media embedding option (NEW)
+        self.embed_media_var = ctk.BooleanVar(value=False)
+        embed_media_check = ctk.CTkCheckBox(
+            main_frame,
+            text="Embed media as base64 data (creates self-contained HTML)",
+            variable=self.embed_media_var
+        )
+        embed_media_check.pack(pady=(0, 20))
+
+        # Info label (updated)
         info_label = ctk.CTkLabel(
             main_frame,
-            text="Note: If CSS is not embedded, theme files will be copied to the export location.",
+            text="Note: Embedding media as base64 will increase file size but creates\na fully self-contained HTML file with no external dependencies.",
             font=("Arial", 11),
-            text_color="gray"
+            text_color="gray",
+            wraplength=450
         )
         info_label.pack(pady=(0, 20))
 
@@ -631,6 +642,7 @@ class ExportDialog:
 
         if self.filename:
             self.embed_css = self.embed_var.get()
+            self.embed_media_base64 = self.embed_media_var.get()  # Store the new option
             self.selected_theme = self.theme_var.get()
             self.result = True
             self.dialog.destroy()
