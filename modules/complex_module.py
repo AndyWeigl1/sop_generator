@@ -124,28 +124,35 @@ class TabModule(Module):
             active_class = 'active' if i == self.content_data['active_tab'] else ''
             tab_buttons += f'<button class="tab {active_class}">{tab}</button>\n'
 
-        # Generate tab content
-        tab_contents = ''
+        # Start building the HTML
+        html = f'''
+    <div class="tabs">
+        {tab_buttons}
+    </div>'''
+
+        # Generate ALL section-content divs for ALL tabs
+        # This is important - all tabs' content must be rendered, not just the active one
         for i, tab in enumerate(self.content_data['tabs']):
             active_class = 'active' if i == self.content_data['active_tab'] else ''
-            content = ''
 
-            # Sort and render sub-modules for this tab
+            # Get content for this tab
+            content = ''
             if tab in self.sub_modules:
                 sorted_modules = sorted(self.sub_modules[tab], key=lambda m: m.position)
                 for module in sorted_modules:
                     content += module.render_to_html()
 
-            tab_contents += f'''
-            <div class="section-content {active_class}">
-                {content if content else '<p style="color: gray; text-align: center;">No content in this tab yet.</p>'}
-            </div>'''
+            # If no content, show placeholder
+            if not content:
+                content = '<p style="color: gray; text-align: center;">No content in this tab yet.</p>'
 
-        return f'''
-        <div class="tabs">
-            {tab_buttons}
-        </div>
-        {tab_contents}'''
+            # Add the section-content div
+            html += f'''
+    <div class="section-content {active_class}">
+        {content}
+    </div>'''
+
+        return html
 
     def get_property_fields(self) -> Dict[str, str]:
         return {
