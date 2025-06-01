@@ -5,6 +5,7 @@ from modules.complex_module import TabModule
 import base64
 from pathlib import Path
 import shutil
+import os
 
 
 class HTMLGenerator:
@@ -42,11 +43,49 @@ class HTMLGenerator:
         else:
             raise ValueError(f"Theme '{theme_name}' not found in {self.themes_dir}")
 
+    def _copy_media_files(self, modules: List[Module], output_dir: Path):
+        """Copy media files referenced in modules to output directory"""
+        assets_dir = output_dir / "Assets"
+        assets_dir.mkdir(exist_ok=True)
+
+        copied_files = []
+
+        def process_module(module):
+            if module.module_type == 'media':
+                source = module.content_data.get('source', '')
+                if source and os.path.exists(source):
+                    # Copy file to Assets directory
+                    filename = os.path.basename(source)
+                    dest_path = assets_dir / filename
+
+                    try:
+                        shutil.copy2(source, dest_path)
+                        copied_files.append(filename)
+                        # Update the module's source to point to the new location
+                        module.content_data['source'] = f"Assets/{filename}"
+                    except Exception as e:
+                        print(f"Warning: Could not copy media file {source}: {e}")
+
+            # Handle TabModules recursively
+            elif hasattr(module, 'get_all_nested_modules'):
+                for nested_module in module.get_all_nested_modules():
+                    process_module(nested_module)
+
+        for module in modules:
+            process_module(module)
+
+        if copied_files:
+            print(f"Copied {len(copied_files)} media files to Assets folder: {copied_files}")
+
     def generate_html(self, modules: List[Module], title: str = "Standard Operating Procedure",
                       output_dir: Optional[Path] = None, embed_theme: bool = False) -> str:
         """
         Generate complete HTML from modules with proper hierarchical rendering and card structure
         """
+        # Copy media files before generating HTML
+        if output_dir:
+            self._copy_media_files(modules, output_dir)
+
         # Sort top-level modules by position
         sorted_modules = sorted(modules, key=lambda m: m.position)
 
@@ -449,6 +488,7 @@ document.addEventListener('keydown', function(e) {
         except Exception as e:
             print(f"Error embedding asset {file_path}: {e}")
             return file_path
+
 
     def get_available_themes(self) -> List[str]:
         """Get list of available themes"""
