@@ -1,10 +1,11 @@
-# gui/canvas_panel.py - Enhanced with library drag and drop support
+# gui/canvas_panel.py - Enhanced with library drag and drop support and modular widget management
 import customtkinter as ctk
 from typing import Dict, Optional, Tuple, Any
 from modules.base_module import Module
 from modules.complex_module import TabModule
 from gui.handlers.canvas_drag_drop_handler import CanvasDragDropHandler
 from gui.handlers.library_drag_drop_handler import LibraryDragDropHandler
+from gui.renderers.module_widget_manager import ModuleWidgetManager
 import tkinter as tk
 
 
@@ -14,9 +15,7 @@ class CanvasPanel:
     def __init__(self, parent, app_instance):
         self.parent = parent
         self.app = app_instance
-        self.module_widgets: Dict[str, ctk.CTkFrame] = {}
         self.tab_widgets: Dict[str, Dict[str, ctk.CTkFrame]] = {}  # tab_module_id -> {tab_name -> frame}
-        self.selected_widget: Optional[ctk.CTkFrame] = None
         self.preview_mode = False
 
         # Track widgets scheduled for destruction to prevent access
@@ -27,6 +26,15 @@ class CanvasPanel:
         self.library_drag_drop_handler = LibraryDragDropHandler(self, app_instance)
 
         self._setup_canvas()
+
+        # Initialize module widget manager after canvas setup
+        self.module_widget_manager = ModuleWidgetManager(
+            modules_frame=self.modules_frame,
+            app_instance=app_instance,
+            drag_drop_handler=self.drag_drop_handler,
+            safe_widget_exists_func=self._safe_widget_exists,
+            safe_destroy_widget_func=self._safe_destroy_widget
+        )
 
     def _setup_canvas(self):
         """Initialize canvas layout with drop zone support"""
@@ -65,12 +73,12 @@ class CanvasPanel:
             self.widgets_being_destroyed.add(id(widget))
 
             # Clear any selection
-            if self.selected_widget == widget:
-                self.selected_widget = None
+            if hasattr(self.module_widget_manager, 'selected_widget') and self.module_widget_manager.selected_widget == widget:
+                self.module_widget_manager.selected_widget = None
 
             # Clear library drop highlighting if this widget is highlighted
-            if self.library_drop_highlight == widget:
-                self.library_drop_highlight = None
+            if hasattr(self.library_drag_drop_handler, 'library_drop_highlight') and self.library_drag_drop_handler.library_drop_highlight == widget:
+                self.library_drag_drop_handler.library_drop_highlight = None
 
             # Unbind all events recursively
             self._unbind_all_events(widget)
@@ -115,19 +123,15 @@ class CanvasPanel:
 
     def add_module_widget(self, module: Module, with_nested: bool = False):
         """Add visual representation of module"""
-        # Create main module frame
-        module_frame = self._create_module_frame(module, is_top_level=True)
-        module_frame.pack(fill="x", padx=5, pady=5)
-
-        # Store reference
-        self.module_widgets[module.id] = module_frame
+        # Delegate to module widget manager
+        self.module_widget_manager.add_module_widget(module, with_nested)
 
         # If it's a TabModule, create tab content areas
         if isinstance(module, TabModule):
-            self._create_tab_content_areas(module, module_frame, with_nested)
-
-        # Make frame draggable using the drag drop handler
-        self.drag_drop_handler.enable_drag_drop(module_frame, module)
+            # Get the main module frame that was just created
+            module_frame = self.module_widget_manager.module_widgets.get(module.id)
+            if module_frame:
+                self._create_tab_content_areas(module, module_frame, with_nested)
 
     def _create_tab_content_areas(self, tab_module: TabModule, parent_frame: ctk.CTkFrame,
                                   with_nested: bool = False):
@@ -266,7 +270,7 @@ class CanvasPanel:
     def _safe_on_tab_click(self, tab_module: TabModule, tab_name: str):
         """Safely handle tab selection with widget existence checks"""
         try:
-            if not self._safe_widget_exists(self.module_widgets.get(tab_module.id)):
+            if not self._safe_widget_exists(self.module_widget_manager.module_widgets.get(tab_module.id)):
                 return
             self._on_tab_click(tab_module, tab_name)
         except Exception as e:
@@ -275,7 +279,7 @@ class CanvasPanel:
     def _safe_add_new_tab(self, tab_module: TabModule):
         """Safely add new tab with widget existence checks"""
         try:
-            if not self._safe_widget_exists(self.module_widgets.get(tab_module.id)):
+            if not self._safe_widget_exists(self.module_widget_manager.module_widgets.get(tab_module.id)):
                 return
             self._add_new_tab(tab_module)
         except Exception as e:
@@ -363,13 +367,18 @@ class CanvasPanel:
             print(f"Error: Container for tab '{tab_name}' not found after attempting to switch/create.")
             return
 
-        # Create module frame
-        module_frame = self._create_module_frame(module, is_top_level=False, parent_tab=(tab_module, tab_name))
+        # Create module frame using the widget manager
+        module_frame = self.module_widget_manager.create_module_frame(
+            module, 
+            is_top_level=False, 
+            parent_tab=(tab_module, tab_name),
+            parent_widget=container
+        )
         module_frame.pack(fill="x", padx=5, pady=5)
 
         # Store reference (with tab context in the key)
         widget_key = f"{tab_module.id}:{tab_name}:{module.id}"
-        self.module_widgets[widget_key] = module_frame
+        self.module_widget_manager.module_widgets[widget_key] = module_frame
 
         # Enable drag and drop for this module using the handler
         self.drag_drop_handler.enable_drag_drop(module_frame, module, parent_tab=(tab_module, tab_name))
@@ -392,176 +401,6 @@ class CanvasPanel:
         # Update the main window status
         if hasattr(self.app, 'main_window') and hasattr(self.app.main_window, 'set_status'):
             self.app.main_window.set_status(f"Adding to '{tab_name}' tab", "green")
-
-    def _create_module_frame(self, module: Module, is_top_level: bool = True,
-                             parent_tab: Optional[Tuple[TabModule, str]] = None) -> ctk.CTkFrame:
-        """Create a frame for a module"""
-        # Use different styling for nested modules
-        frame_color = "gray15" if is_top_level else "gray18"
-        border_color = "gray15" if is_top_level else "gray20"
-
-        parent_widget = self.modules_frame
-        if not is_top_level and parent_tab:
-            tab_module_id, tab_name = parent_tab[0].id, parent_tab[1]
-            if tab_module_id in self.tab_widgets and tab_name in self.tab_widgets[tab_module_id]:
-                container = self.tab_widgets[tab_module_id][tab_name]
-                if self._safe_widget_exists(container):
-                    parent_widget = container
-                else:
-                    parent_widget = self.modules_frame
-            else:
-                parent_widget = self.modules_frame
-
-        module_frame = ctk.CTkFrame(
-            parent_widget,
-            fg_color=frame_color,
-            border_width=2,
-            border_color=border_color
-        )
-
-        # Store module reference in the frame
-        module_frame._module = module
-        module_frame._parent_tab = parent_tab
-
-        # Create header with module type and controls
-        header_frame = ctk.CTkFrame(module_frame, fg_color="gray20", height=30)
-        header_frame.pack(fill="x", padx=2, pady=2)
-        header_frame.pack_propagate(False)
-
-        # Add drag handle with safer event binding
-        drag_handle = ctk.CTkLabel(
-            header_frame,
-            text="⋮⋮",
-            font=("Arial", 16, "bold"),
-            text_color="white",
-            width=30,
-            height=25,
-            fg_color="gray30",
-            corner_radius=3
-        )
-        drag_handle.pack(side="left", padx=(5, 5), pady=2)
-
-        # Store reference to drag handle for easy access
-        module_frame._drag_handle = drag_handle
-
-        # Add indentation for nested modules
-        if not is_top_level:
-            indent_label = ctk.CTkLabel(header_frame, text=" →", text_color="gray")
-            indent_label.pack(side="left", padx=(5, 0))
-
-        # Module type label
-        type_label = ctk.CTkLabel(
-            header_frame,
-            text=module.display_name,
-            font=("Arial", 12, "bold")
-        )
-        type_label.pack(side="left", padx=10)
-
-        # Add clickable area for module selection (separate from drag)
-        # When clicking a main canvas module, clear tab context
-        def on_module_click(event):
-            # Don't trigger selection if clicking on drag handle or control buttons
-            if (hasattr(event.widget, '_drag_handle') or
-                    isinstance(event.widget, ctk.CTkButton) or
-                    event.widget == drag_handle):
-                return
-
-            if is_top_level:  # Only clear context when clicking main canvas modules
-                self.clear_tab_context()
-            self._safe_select_module_click(module, parent_tab)
-
-        # Enhanced click handling - make entire header clickable
-        def on_header_click(event):
-            # Don't trigger selection if clicking on drag handle or buttons
-            clicked_widget = event.widget
-
-            # Check if we clicked on the drag handle
-            if clicked_widget == drag_handle:
-                return
-
-            # Check if we clicked on a button (control buttons)
-            if isinstance(clicked_widget, ctk.CTkButton):
-                return
-
-            # Check if the clicked widget is inside the controls frame
-            current = clicked_widget
-            while current and current != header_frame:
-                if current == controls_frame:
-                    return  # Don't select if clicking in controls area
-                try:
-                    current = current.master
-                except:
-                    break
-
-            # Safe to trigger selection
-            if is_top_level:  # Only clear context when clicking main canvas modules
-                self.clear_tab_context()
-            self._safe_select_module_click(module, parent_tab)
-
-        # Bind click to multiple areas for better UX
-        type_label.bind("<Button-1>", on_module_click)
-        header_frame.bind("<Button-1>", on_header_click)
-
-        # Also make indent label clickable for nested modules
-        if not is_top_level:
-            indent_label.bind("<Button-1>", on_module_click)
-
-        # Control buttons
-        controls_frame = ctk.CTkFrame(header_frame, fg_color="gray20")
-        controls_frame.pack(side="right", padx=5)
-
-        # Context-specific controls
-        if not is_top_level and parent_tab:
-            # For modules in tabs: add "move to main" button
-            move_out_btn = ctk.CTkButton(
-                controls_frame,
-                text="↗",
-                width=25,
-                height=25,
-                command=lambda m=module, pt0=parent_tab[0], pt1=parent_tab[1]: self._safe_move_module_from_tab(m, pt0,
-                                                                                                               pt1)
-            )
-            move_out_btn.pack(side="left", padx=2)
-
-        # Standard controls
-        up_btn = ctk.CTkButton(
-            controls_frame,
-            text="↑",
-            width=25,
-            height=25,
-            command=lambda: self._safe_move_module_up(module, parent_tab)
-        )
-        up_btn.pack(side="left", padx=2)
-
-        down_btn = ctk.CTkButton(
-            controls_frame,
-            text="↓",
-            width=25,
-            height=25,
-            command=lambda: self._safe_move_module_down(module, parent_tab)
-        )
-        down_btn.pack(side="left", padx=2)
-
-        # Delete button
-        delete_btn = ctk.CTkButton(
-            controls_frame,
-            text="✕",
-            width=25,
-            height=25,
-            fg_color="darkred",
-            hover_color="red",
-            command=lambda mid=module.id: self._safe_remove_module(mid)
-        )
-        delete_btn.pack(side="left", padx=2)
-
-        # Content preview
-        preview_frame = ctk.CTkFrame(module_frame, fg_color="gray10")
-        preview_frame.pack(fill="both", expand=True, padx=5, pady=5)
-
-        # Add module preview content
-        self._create_module_preview(preview_frame, module)
-
-        return module_frame
 
     def _is_child_of(self, child_widget, parent_widget) -> bool:
         """Check if child_widget is a descendant of parent_widget"""
@@ -630,21 +469,6 @@ class CanvasPanel:
             # Module is on main canvas
             self._move_module(module.id, 1)
 
-    def _create_module_preview(self, parent: ctk.CTkFrame, module: Module):
-        """Create preview of module content"""
-        # Create a simplified preview based on module type
-        preview_text = self._get_preview_text(module)
-
-        preview_label = ctk.CTkLabel(
-            parent,
-            text=preview_text,
-            font=("Arial", 11),
-            justify="left",
-            anchor="w",
-            wraplength=400
-        )
-        preview_label.pack(fill="both", expand=True, padx=10, pady=10)
-
     def _on_tab_click(self, tab_module: TabModule, tab_name: str):
         """Handle tab selection - for VIEWING only, not setting add context"""
         if tab_name not in tab_module.content_data['tabs']:
@@ -671,7 +495,7 @@ class CanvasPanel:
 
     def _switch_tab_content(self, tab_module: TabModule, new_active_tab: str):
         """Switch visible tab content without destroying widgets"""
-        tab_module_widget = self.module_widgets.get(tab_module.id)
+        tab_module_widget = self.module_widget_manager.module_widgets.get(tab_module.id)
         if not tab_module_widget or not self._safe_widget_exists(tab_module_widget):
             return
 
@@ -695,7 +519,7 @@ class CanvasPanel:
 
     def _update_tab_button_states(self, tab_module: TabModule):
         """Update the visual state of tab buttons"""
-        tab_module_widget = self.module_widgets.get(tab_module.id)
+        tab_module_widget = self.module_widget_manager.module_widgets.get(tab_module.id)
         if not tab_module_widget or not self._safe_widget_exists(tab_module_widget):
             return
 
@@ -778,10 +602,10 @@ class CanvasPanel:
     def _switch_active_tab(self, tab_module: TabModule, tab_name: str):
         """Switch the visible tab content with improved safety"""
         # Find the parent_frame of the tab_module
-        if tab_module.id not in self.module_widgets:
+        if tab_module.id not in self.module_widget_manager.module_widgets:
             return
 
-        tab_module_main_frame = self.module_widgets[tab_module.id]
+        tab_module_main_frame = self.module_widget_manager.module_widgets[tab_module.id]
         if not self._safe_widget_exists(tab_module_main_frame):
             return
 
@@ -914,17 +738,17 @@ class CanvasPanel:
     def _cleanup_tab_widget_references(self, tab_module_id: str):
         """Clean up widget references for a tab module before recreating them"""
         keys_to_remove = []
-        for widget_key in list(self.module_widgets.keys()):  # Create a copy of keys
+        for widget_key in list(self.module_widget_manager.module_widgets.keys()):  # Create a copy of keys
             if widget_key.startswith(f"{tab_module_id}:"):
                 keys_to_remove.append(widget_key)
 
         for key in keys_to_remove:
-            if key in self.module_widgets:
-                widget = self.module_widgets[key]
+            if key in self.module_widget_manager.module_widgets:
+                widget = self.module_widget_manager.module_widgets[key]
                 # Clear selection if this widget is currently selected
-                if self.selected_widget == widget:
-                    self.selected_widget = None
-                del self.module_widgets[key]
+                if self.module_widget_manager.selected_widget == widget:
+                    self.module_widget_manager.selected_widget = None
+                del self.module_widget_manager.module_widgets[key]
 
     def _add_new_tab(self, tab_module: TabModule):
         """Add a new tab to the TabModule"""
@@ -945,11 +769,11 @@ class CanvasPanel:
         self._cleanup_tab_widget_references(tab_module.id)
 
         # Remove and recreate the widget
-        if tab_module.id in self.module_widgets:
-            widget = self.module_widgets[tab_module.id]
+        if tab_module.id in self.module_widget_manager.module_widgets:
+            widget = self.module_widget_manager.module_widgets[tab_module.id]
             if self._safe_widget_exists(widget):
                 self._safe_destroy_widget(widget)
-            del self.module_widgets[tab_module.id]
+            del self.module_widget_manager.module_widgets[tab_module.id]
 
         # Clean up tab widget references
         if tab_module.id in self.tab_widgets:
@@ -980,16 +804,16 @@ class CanvasPanel:
 
         # Clean up widget references for this specific tab before destroying widgets
         keys_to_remove = []
-        for widget_key in list(self.module_widgets.keys()):
+        for widget_key in list(self.module_widget_manager.module_widgets.keys()):
             if widget_key.startswith(f"{tab_module.id}:{tab_name}:"):
                 keys_to_remove.append(widget_key)
 
         for key in keys_to_remove:
-            if key in self.module_widgets:
-                widget = self.module_widgets[key]
-                if self.selected_widget == widget:
-                    self.selected_widget = None
-                del self.module_widgets[key]
+            if key in self.module_widget_manager.module_widgets:
+                widget = self.module_widget_manager.module_widgets[key]
+                if self.module_widget_manager.selected_widget == widget:
+                    self.module_widget_manager.selected_widget = None
+                del self.module_widget_manager.module_widgets[key]
 
         # Clear existing widgets in the container
         widgets_to_destroy = []
@@ -1014,165 +838,53 @@ class CanvasPanel:
     def remove_module_from_tab_widget(self, tab_module: TabModule, tab_name: str, module_id: str):
         """Remove a module widget from a tab"""
         widget_key = f"{tab_module.id}:{tab_name}:{module_id}"
-        if widget_key in self.module_widgets:
-            widget = self.module_widgets[widget_key]
+        if widget_key in self.module_widget_manager.module_widgets:
+            widget = self.module_widget_manager.module_widgets[widget_key]
 
             # Clear selection if this widget is currently selected
-            if self.selected_widget == widget:
-                self.selected_widget = None
+            if self.module_widget_manager.selected_widget == widget:
+                self.module_widget_manager.selected_widget = None
 
             self._safe_destroy_widget(widget)
-            del self.module_widgets[widget_key]
+            del self.module_widget_manager.module_widgets[widget_key]
 
     def highlight_tab(self, tab_module: TabModule, tab_name: str):
         """Highlight a selected tab"""
-        if tab_module.id in self.module_widgets:
+        if tab_module.id in self.module_widget_manager.module_widgets:
             pass
 
-    def _get_preview_text(self, module: Module) -> str:
-        """Get preview text for module"""
-        if module.module_type == 'header':
-            return f"📄 {module.content_data.get('title', 'Header')}"
-        elif module.module_type == 'text':
-            content = module.content_data.get('content', '')[:100]
-            return f"📝 {content}..." if len(content) >= 100 else f"📝 {content}"
-        elif module.module_type == 'media':
-            return f"🖼️ Media: {module.content_data.get('source', 'No source')}"
-        elif module.module_type == 'step_card':
-            return f"#{module.content_data.get('step_number', '1')} - {module.content_data.get('title', 'Step')}"
-        elif module.module_type == 'table':
-            return f"📊 Table: {module.content_data.get('title', 'Untitled')}"
-        elif module.module_type == 'disclaimer':
-            return f"⚠️ {module.content_data.get('label', 'Disclaimer')}"
-        elif module.module_type == 'section_title':
-            return f"📌 {module.content_data.get('title', 'Section')}"
-        elif module.module_type == 'issue_card':
-            return f"❗ {module.content_data.get('issue_title', 'Issue')}"
-        elif module.module_type == 'footer':
-            return f"📍 Footer - {module.content_data.get('organization', 'Organization')}"
-        elif module.module_type == 'tabs':
-            tab_count = len(module.content_data.get('tabs', []))
-            return f"📑 Tab Section ({tab_count} tabs)"
-        else:
-            return f"{module.display_name}"
-
     def highlight_module(self, module: Module):
-        """Highlight the selected module"""
-        # Remove previous highlight
-        if self.selected_widget and self._safe_widget_exists(self.selected_widget):
-            try:
-                self.selected_widget.configure(border_color=("gray15", "gray15"))
-            except tk.TclError:
-                pass
-            finally:
-                self.selected_widget = None
-
-        # Add highlight to selected module
-        if module.id in self.module_widgets:
-            widget = self.module_widgets[module.id]
-            if self._safe_widget_exists(widget):
-                try:
-                    widget.configure(border_color="blue")
-                    self.selected_widget = widget
-                except tk.TclError:
-                    if module.id in self.module_widgets:
-                        del self.module_widgets[module.id]
+        """Highlight the selected module - delegate to module widget manager"""
+        self.module_widget_manager.highlight_module(module)
 
     def remove_module_widget(self, module_id: str):
-        """Remove module widget from canvas"""
-        if module_id in self.module_widgets:
-            widget = self.module_widgets[module_id]
-
-            # Clear selection if this widget is currently selected
-            if self.selected_widget == widget:
-                self.selected_widget = None
-
-            self._safe_destroy_widget(widget)
-            del self.module_widgets[module_id]
-
-            # Also clean up any tab-related widgets for this module
-            keys_to_remove = [key for key in self.module_widgets.keys() if key.startswith(f"{module_id}:")]
-            for key in keys_to_remove:
-                widget = self.module_widgets[key]
-                if self.selected_widget == widget:
-                    self.selected_widget = None
-                self._safe_destroy_widget(widget)
-                del self.module_widgets[key]
+        """Remove module widget from canvas - delegate to module widget manager"""
+        self.module_widget_manager.remove_module_widget(module_id)
 
     def clear(self):
         """Clear all modules from canvas"""
-        self.selected_widget = None
-
         # Notify drag drop handler to clean up
         self.drag_drop_handler.cleanup_on_canvas_clear()
         self.library_drag_drop_handler.cleanup_on_canvas_clear()
 
-        # Destroy all widgets safely
-        widgets_to_destroy = list(self.module_widgets.values())
-        for widget in widgets_to_destroy:
-            self._safe_destroy_widget(widget)
+        # Clear all module widgets via the manager
+        self.module_widget_manager.clear_all_widgets()
 
-        # Clear all tracking dictionaries
-        self.module_widgets.clear()
+        # Clear tab tracking dictionaries
         self.tab_widgets.clear()
         self.widgets_being_destroyed.clear()
 
     def refresh_order(self):
-        """Refresh the visual order of modules"""
-        modules = sorted(self.app.active_modules, key=lambda m: m.position)
-
-        for module in modules:
-            if module.id in self.module_widgets:
-                widget = self.module_widgets[module.id]
-                if self._safe_widget_exists(widget):
-                    try:
-                        widget.pack_forget()
-                        widget.pack(fill="x", padx=5, pady=5)
-                    except tk.TclError:
-                        pass
+        """Refresh the visual order of modules - delegate to module widget manager"""
+        self.module_widget_manager.refresh_widget_order()
 
     def update_module_preview(self, module: Module):
-        """Update the preview for a specific module"""
-        if module.id in self.module_widgets:
-            widget = self.module_widgets[module.id]
-            if not self._safe_widget_exists(widget):
-                return
-
-            # Find and update the preview label
-            try:
-                for child in widget.winfo_children():
-                    if isinstance(child, ctk.CTkFrame) and self._safe_widget_exists(child):
-                        for grandchild in child.winfo_children():
-                            if (isinstance(grandchild, ctk.CTkLabel) and
-                                    self._safe_widget_exists(grandchild) and
-                                    grandchild.cget("font") == ("Arial", 11)):
-                                try:
-                                    grandchild.configure(text=self._get_preview_text(module))
-                                except tk.TclError:
-                                    pass
-                                break
-            except tk.TclError:
-                pass
+        """Update the preview for a specific module - delegate to module widget manager"""
+        self.module_widget_manager.update_module_preview(module)
 
     def set_preview_mode(self, enabled: bool):
-        """Toggle between edit and preview modes"""
-        self.preview_mode = enabled
-
-        for widget in self.module_widgets.values():
-            if not self._safe_widget_exists(widget):
-                continue
-
-            try:
-                if enabled:
-                    for child in widget.winfo_children():
-                        if isinstance(child, ctk.CTkFrame) and self._safe_widget_exists(child):
-                            for grandchild in child.winfo_children():
-                                if isinstance(grandchild, ctk.CTkFrame) and self._safe_widget_exists(grandchild):
-                                    grandchild.pack_forget()
-                else:
-                    self.refresh_order()
-            except tk.TclError:
-                pass
+        """Toggle between edit and preview modes - delegate to module widget manager"""
+        self.module_widget_manager.set_preview_mode(enabled)
 
     def _move_module(self, module_id: str, direction: int):
         """Move module up or down on main canvas"""
@@ -1186,39 +898,3 @@ class CanvasPanel:
             new_index = module_index + direction
             if 0 <= new_index < len(self.app.active_modules):
                 self.app.reorder_modules(module_id, new_index)
-
-    def _safe_select_module_click(self, module: Module, parent_tab: Optional[Tuple[TabModule, str]] = None):
-        """Handle module selection clicks (separate from drag) with safety checks"""
-        try:
-            if not self.drag_drop_handler.is_dragging:
-                self.app.select_module(module, parent_tab)
-        except Exception as e:
-            print(f"Error in module selection: {e}")
-
-    def _safe_move_module_from_tab(self, module: Module, tab_module: TabModule, tab_name: str):
-        """Safely move module from tab to main canvas"""
-        try:
-            self.app.move_module_from_tab(module, tab_module, tab_name)
-        except Exception as e:
-            print(f"Error moving module from tab: {e}")
-
-    def _safe_move_module_up(self, module: Module, parent_tab: Optional[Tuple[TabModule, str]] = None):
-        """Safely move module up"""
-        try:
-            self._move_module_up(module, parent_tab)
-        except Exception as e:
-            print(f"Error moving module up: {e}")
-
-    def _safe_move_module_down(self, module: Module, parent_tab: Optional[Tuple[TabModule, str]] = None):
-        """Safely move module down"""
-        try:
-            self._move_module_down(module, parent_tab)
-        except Exception as e:
-            print(f"Error moving module down: {e}")
-
-    def _safe_remove_module(self, module_id: str):
-        """Safely remove module"""
-        try:
-            self.app.remove_module(module_id)
-        except Exception as e:
-            print(f"Error removing module: {e}")
