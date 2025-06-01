@@ -44,6 +44,7 @@ class SOPBuilderApp:
     def _setup_menu_handlers(self):
         """Connect menu buttons to their handlers"""
         self.main_window.new_btn.configure(command=self.new_project)
+        self.main_window.blank_btn.configure(command=self.create_blank_project)  # Connect blank button
         self.main_window.open_btn.configure(command=self.open_project)
         self.main_window.save_btn.configure(command=self.save_project)
         self.main_window.export_btn.configure(command=self.export_to_html)
@@ -62,7 +63,6 @@ class SOPBuilderApp:
             self.active_modules.append(header_module)
             self.canvas_panel.add_module_widget(header_module)
 
-            # header_module.update_content('logo_path', 'Assets/Kodiak.png')
             # 2. Add Tab Module
             tab_module = ModuleFactory.create_module('tabs')
             tab_module.position = 1
@@ -107,7 +107,7 @@ class SOPBuilderApp:
             if self.selected_tab_context:
                 tab_module, tab_name = self.selected_tab_context
                 # Add to the selected tab
-                if tab_module.add_module_to_tab(tab_name, module): # Assuming TabModule.add_module_to_tab exists
+                if tab_module.add_module_to_tab(tab_name, module):
                     # Update canvas to show the module in the tab
                     self.canvas_panel.add_module_to_tab_widget(tab_module, tab_name, module)
                     # Select the new module
@@ -152,12 +152,12 @@ class SOPBuilderApp:
     def remove_module(self, module_id: str):
         """Remove a module from the SOP (from main canvas or from a tab)"""
         # First check if it's in a tab
-        for module_iter in self.active_modules: # Changed variable name to avoid conflict
+        for module_iter in self.active_modules:
             if isinstance(module_iter, TabModule):
-                tab_name = module_iter.find_module_tab(module_id) # Assuming TabModule.find_module_tab exists
+                tab_name = module_iter.find_module_tab(module_id)
                 if tab_name:
                     # Remove from tab
-                    removed_module = module_iter.remove_module_from_tab(tab_name, module_id) # Assuming TabModule.remove_module_from_tab exists
+                    removed_module = module_iter.remove_module_from_tab(tab_name, module_id)
                     if removed_module:
                         self.canvas_panel.remove_module_from_tab_widget(module_iter, tab_name, module_id)
                         # Clear selection if this was selected
@@ -169,7 +169,7 @@ class SOPBuilderApp:
 
         # If not in a tab, check main canvas
         module_to_remove = None
-        for module_iter_main in self.active_modules: # Changed variable name
+        for module_iter_main in self.active_modules:
             if module_iter_main.id == module_id:
                 module_to_remove = module_iter_main
                 break
@@ -225,7 +225,7 @@ class SOPBuilderApp:
         for module in self.active_modules:
             all_modules.append(module)
             if isinstance(module, TabModule):
-                all_modules.extend(module.get_all_nested_modules()) # Assuming TabModule.get_all_nested_modules
+                all_modules.extend(module.get_all_nested_modules())
         return all_modules
 
     def find_module_by_id(self, module_id: str) -> Optional[Tuple[Module, Optional[Tuple[TabModule, str]]]]:
@@ -290,6 +290,7 @@ class SOPBuilderApp:
         self.properties_panel.clear()
         self.current_project_path = None
         self.selected_module = None
+        self.selected_tab_context = None
 
         # Update title
         self.root.title("SOP Builder - New Project")
@@ -315,6 +316,7 @@ class SOPBuilderApp:
         self.properties_panel.clear()
         self.current_project_path = None
         self.selected_module = None
+        self.selected_tab_context = None
         self.set_modified(False)
 
         # Update title
@@ -363,13 +365,13 @@ class SOPBuilderApp:
             else:
                 return
 
-        if not self.current_project_path: # Still no path, return
+        if not self.current_project_path:
             return
 
         try:
             # Save project with hierarchy
             project_data = {
-                'version': '1.1', # Updated version for tab support
+                'version': '1.1',
                 'modules': [self.project_manager.serialize_module(m) for m in self.active_modules]
             }
 
