@@ -698,11 +698,51 @@ class CanvasPanel:
         # Add clickable area for module selection (separate from drag)
         # When clicking a main canvas module, clear tab context
         def on_module_click(event):
+            # Don't trigger selection if clicking on drag handle or control buttons
+            if (hasattr(event.widget, '_drag_handle') or
+                    isinstance(event.widget, ctk.CTkButton) or
+                    event.widget == drag_handle):
+                return
+
             if is_top_level:  # Only clear context when clicking main canvas modules
                 self.clear_tab_context()
             self._safe_select_module_click(module, parent_tab)
 
+        # Enhanced click handling - make entire header clickable
+        def on_header_click(event):
+            # Don't trigger selection if clicking on drag handle or buttons
+            clicked_widget = event.widget
+
+            # Check if we clicked on the drag handle
+            if clicked_widget == drag_handle:
+                return
+
+            # Check if we clicked on a button (control buttons)
+            if isinstance(clicked_widget, ctk.CTkButton):
+                return
+
+            # Check if the clicked widget is inside the controls frame
+            current = clicked_widget
+            while current and current != header_frame:
+                if current == controls_frame:
+                    return  # Don't select if clicking in controls area
+                try:
+                    current = current.master
+                except:
+                    break
+
+            # Safe to trigger selection
+            if is_top_level:  # Only clear context when clicking main canvas modules
+                self.clear_tab_context()
+            self._safe_select_module_click(module, parent_tab)
+
+        # Bind click to multiple areas for better UX
         type_label.bind("<Button-1>", on_module_click)
+        header_frame.bind("<Button-1>", on_header_click)
+
+        # Also make indent label clickable for nested modules
+        if not is_top_level:
+            indent_label.bind("<Button-1>", on_module_click)
 
         # Control buttons
         controls_frame = ctk.CTkFrame(header_frame, fg_color="gray20")
