@@ -3,6 +3,7 @@ import customtkinter as ctk
 from typing import Dict, Optional, Tuple, Any
 from modules.base_module import Module
 from modules.complex_module import TabModule
+from gui.handlers.canvas_drag_drop_handler import CanvasDragDropHandler
 import tkinter as tk
 
 
@@ -17,17 +18,14 @@ class CanvasPanel:
         self.selected_widget: Optional[ctk.CTkFrame] = None
         self.preview_mode = False
 
-        # Drag and drop state for existing modules
-        self.drag_data = None
-        self.drop_zone_highlight = None
-        self.drag_preview = None
-        self.is_dragging = False
-
         # Enhanced drop zone highlighting for library drags
         self.library_drop_highlight = None
 
         # Track widgets scheduled for destruction to prevent access
         self.widgets_being_destroyed = set()
+
+        # Initialize drag and drop handler
+        self.drag_drop_handler = CanvasDragDropHandler(self, app_instance)
 
         self._setup_canvas()
 
@@ -302,10 +300,6 @@ class CanvasPanel:
             if self.selected_widget == widget:
                 self.selected_widget = None
 
-            # Clear drag state if this widget is involved
-            if self.drag_data and self.drag_data.get('source_widget') == widget:
-                self._cleanup_drag()
-
             # Clear library drop highlighting if this widget is highlighted
             if self.library_drop_highlight == widget:
                 self.library_drop_highlight = None
@@ -364,8 +358,8 @@ class CanvasPanel:
         if isinstance(module, TabModule):
             self._create_tab_content_areas(module, module_frame, with_nested)
 
-        # Make frame draggable
-        self._enable_drag_drop(module_frame, module)
+        # Make frame draggable using the drag drop handler
+        self.drag_drop_handler.enable_drag_drop(module_frame, module)
 
     def _create_tab_content_areas(self, tab_module: TabModule, parent_frame: ctk.CTkFrame,
                                   with_nested: bool = False):
@@ -531,7 +525,7 @@ class CanvasPanel:
                 self._highlight_active_add_target(content_frame)
 
         def on_enter(event):
-            if self._safe_widget_exists(content_frame) and not self.is_dragging:
+            if self._safe_widget_exists(content_frame) and not self.drag_drop_handler.is_dragging:
                 # Enhanced feedback for library drags
                 if self.app.main_window.is_dragging_from_library:
                     try:
@@ -546,7 +540,7 @@ class CanvasPanel:
                         pass
 
         def on_leave(event):
-            if self._safe_widget_exists(content_frame) and not self.is_dragging:
+            if self._safe_widget_exists(content_frame) and not self.drag_drop_handler.is_dragging:
                 # Remove hover feedback unless this is the active add target
                 if (not hasattr(self.app, 'selected_tab_context') or
                         not self.app.selected_tab_context or
@@ -570,7 +564,7 @@ class CanvasPanel:
 
     def _set_tab_context(self, tab_module: TabModule, tab_name: str):
         """Set the selected tab context for adding new modules with visual feedback"""
-        if not self.is_dragging:  # Only set context if not dragging
+        if not self.drag_drop_handler.is_dragging:  # Only set context if not dragging
             self.app.selected_tab_context = (tab_module, tab_name)
             self.app.select_tab(tab_module, tab_name)
 
@@ -609,8 +603,8 @@ class CanvasPanel:
         widget_key = f"{tab_module.id}:{tab_name}:{module.id}"
         self.module_widgets[widget_key] = module_frame
 
-        # Enable drag and drop for this module
-        self._enable_drag_drop(module_frame, module, parent_tab=(tab_module, tab_name))
+        # Enable drag and drop for this module using the handler
+        self.drag_drop_handler.enable_drag_drop(module_frame, module, parent_tab=(tab_module, tab_name))
 
     def _clear_add_target_highlights(self):
         """Clear all add target highlights"""
@@ -801,115 +795,6 @@ class CanvasPanel:
 
         return module_frame
 
-    # ... [Include all the other existing methods from the original canvas_panel.py] ...
-    # [For brevity, I'll include the key drag and drop methods that need modification]
-
-    def _enable_drag_drop(self, frame: ctk.CTkFrame, module: Module,
-                          parent_tab: Optional[Tuple[TabModule, str]] = None):
-        """Enable drag and drop functionality for a module frame with safety checks"""
-
-        # Get the drag handle
-        drag_handle = getattr(frame, '_drag_handle', None)
-        if not drag_handle or not self._safe_widget_exists(drag_handle):
-            print(f"Warning: No valid drag handle found for module {module.id}")
-            return
-
-        def start_drag(event):
-            if self.preview_mode or not self._safe_widget_exists(frame) or not self._safe_widget_exists(drag_handle):
-                return
-
-            self.is_dragging = True
-            self.drag_data = {
-                'module': module,
-                'parent_tab': parent_tab,
-                'start_x': event.x_root,
-                'start_y': event.y_root,
-                'source_widget': frame
-            }
-
-            # Create drag preview
-            self._create_drag_preview(event.x_root, event.y_root, module.display_name)
-
-            # Bind drag motion to the root window to track mouse movement
-            try:
-                self.app.root.bind('<B1-Motion>', on_drag_motion)
-                self.app.root.bind('<ButtonRelease-1>', end_drag)
-            except tk.TclError:
-                self._cleanup_drag()
-                return
-
-            # Make frame semi-transparent during drag
-            if self._safe_widget_exists(frame):
-                try:
-                    frame.configure(fg_color=("gray25", "gray25"))
-                except tk.TclError:
-                    pass
-
-            # Change cursor
-            if self._safe_widget_exists(drag_handle):
-                try:
-                    drag_handle.configure(cursor="hand2")
-                except tk.TclError:
-                    pass
-
-        def on_drag_motion(event):
-            if not self.drag_data or not self.is_dragging:
-                return
-
-            # Update drag preview position
-            if self.drag_preview and self._safe_widget_exists(self.drag_preview):
-                try:
-                    self.drag_preview.geometry(f"200x40+{event.x_root + 10}+{event.y_root + 10}")
-                except Exception:
-                    pass
-
-            # Check for drop zones
-            try:
-                widget_under_cursor = self.app.root.winfo_containing(event.x_root, event.y_root)
-                self._update_drop_zone_highlight(widget_under_cursor)
-            except tk.TclError:
-                pass
-
-        def end_drag(event):
-            if not self.drag_data:
-                return
-
-            # Find drop target
-            try:
-                drop_target = self.app.root.winfo_containing(event.x_root, event.y_root)
-                self._handle_drop(drop_target, event.x_root, event.y_root)
-            except tk.TclError:
-                pass
-
-            # Cleanup
-            self._cleanup_drag()
-
-        # Bind specifically to the drag handle only with safety checks
-        if self._safe_widget_exists(drag_handle):
-            try:
-                drag_handle.bind('<Button-1>', start_drag)
-                drag_handle.configure(cursor="hand2")
-
-                # Add hover effect to make it clear it's draggable
-                def on_enter(event):
-                    if not self.is_dragging and self._safe_widget_exists(drag_handle):
-                        try:
-                            drag_handle.configure(fg_color="gray40")
-                        except tk.TclError:
-                            pass
-
-                def on_leave(event):
-                    if not self.is_dragging and self._safe_widget_exists(drag_handle):
-                        try:
-                            drag_handle.configure(fg_color="gray30")
-                        except tk.TclError:
-                            pass
-
-                drag_handle.bind('<Enter>', on_enter)
-                drag_handle.bind('<Leave>', on_leave)
-            except tk.TclError:
-                pass
-
     def _is_child_of(self, child_widget, parent_widget) -> bool:
         """Check if child_widget is a descendant of parent_widget"""
         if not self._safe_widget_exists(child_widget) or not self._safe_widget_exists(parent_widget):
@@ -934,220 +819,6 @@ class CanvasPanel:
         # Update status
         if hasattr(self.app, 'main_window') and hasattr(self.app.main_window, 'set_status'):
             self.app.main_window.set_status("Drag modules from left panel to canvas", "blue")
-
-    def _create_drag_preview(self, x: int, y: int, module_name: str):
-        """Create a visual preview of the dragged module"""
-        try:
-            self.drag_preview = ctk.CTkToplevel(self.app.root)
-            self.drag_preview.overrideredirect(True)
-            self.drag_preview.attributes('-alpha', 0.8)
-            self.drag_preview.geometry(f"200x40+{x + 10}+{y + 10}")
-
-            preview_label = ctk.CTkLabel(
-                self.drag_preview,
-                text=f"📦 {module_name}",
-                fg_color="blue",
-                corner_radius=5,
-                font=("Arial", 10, "bold")
-            )
-            preview_label.pack(fill="both", expand=True, padx=2, pady=2)
-        except Exception as e:
-            print(f"Error creating drag preview: {e}")
-            self.drag_preview = None
-
-    def _update_drop_zone_highlight(self, widget_under_cursor):
-        """Update visual feedback for drop zones"""
-        # Clear previous highlight
-        if self.drop_zone_highlight and self._safe_widget_exists(self.drop_zone_highlight):
-            try:
-                self.drop_zone_highlight.configure(fg_color=self.drop_zone_highlight._original_color)
-            except (tk.TclError, AttributeError):
-                pass
-            self.drop_zone_highlight = None
-
-        # Find drop zone
-        drop_zone = self._find_drop_zone(widget_under_cursor)
-
-        if drop_zone and self._safe_widget_exists(drop_zone):
-            # Store original color and highlight
-            if not hasattr(drop_zone, '_original_color'):
-                try:
-                    drop_zone._original_color = drop_zone.cget('fg_color')
-                except tk.TclError:
-                    drop_zone._original_color = "gray15"
-
-            try:
-                drop_zone.configure(fg_color="lightblue")
-                self.drop_zone_highlight = drop_zone
-            except tk.TclError:
-                pass
-
-    def _find_drop_zone(self, widget) -> Optional[ctk.CTkFrame]:
-        """Find the nearest valid drop zone widget"""
-        current = widget
-
-        while current:
-            # Check if widget still exists
-            if not self._safe_widget_exists(current):
-                try:
-                    current = current.master
-                    continue
-                except (tk.TclError, AttributeError):
-                    break
-
-            # Check if this widget has drop zone info
-            if hasattr(current, '_drop_zone_info'):
-                return current
-
-            # Check if this is the main modules frame (for main canvas drops)
-            if current == self.modules_frame:
-                return current
-
-            # Check if this is a tab content frame
-            if isinstance(current, (ctk.CTkFrame, ctk.CTkScrollableFrame)):
-                for tab_id, tab_containers in self.tab_widgets.items():
-                    for tab_name, container in tab_containers.items():
-                        if not self._safe_widget_exists(container):
-                            continue
-                        if current == container or self._is_child_of(current, container):
-                            # Add drop zone info if not present
-                            if not hasattr(current, '_drop_zone_info'):
-                                # Find the tab module
-                                for module in self.app.active_modules:
-                                    if isinstance(module, TabModule) and module.id == tab_id:
-                                        current._drop_zone_info = {
-                                            'type': 'tab',
-                                            'tab_module': module,
-                                            'tab_name': tab_name
-                                        }
-                                        break
-                            return current
-
-            try:
-                current = current.master
-            except (tk.TclError, AttributeError):
-                break
-
-        return None
-
-    def _handle_drop(self, drop_target, x: int, y: int):
-        """Handle the drop operation"""
-        if not self.drag_data:
-            return
-
-        dragged_module = self.drag_data['module']
-        source_parent_tab = self.drag_data.get('parent_tab')
-
-        drop_zone = self._find_drop_zone(drop_target)
-
-        if not drop_zone:
-            return  # Invalid drop
-
-        # Determine drop action
-        if hasattr(drop_zone, '_drop_zone_info'):
-            drop_info = drop_zone._drop_zone_info
-            if drop_info['type'] == 'tab':
-                self._handle_drop_on_tab(dragged_module, drop_info['tab_module'], drop_info['tab_name'])
-        elif drop_zone == self.modules_frame:
-            self._handle_drop_on_main_canvas(dragged_module)
-
-    def _handle_drop_on_tab(self, module: Module, target_tab_module: TabModule, tab_name: str):
-        """Handle dropping a module onto a tab"""
-        source_parent_tab = self.drag_data.get('parent_tab')
-
-        # Remove from source
-        if source_parent_tab:
-            # Moving from another tab
-            source_tab_module, source_tab_name = source_parent_tab
-            removed_module = source_tab_module.remove_module_from_tab(source_tab_name, module.id)
-            if removed_module:
-                self.remove_module_from_tab_widget(source_tab_module, source_tab_name, module.id)
-        else:
-            # Moving from main canvas
-            if module in self.app.active_modules:
-                self.app.active_modules.remove(module)
-                self.remove_module_widget(module.id)
-
-        # Add to target tab
-        if target_tab_module.add_module_to_tab(tab_name, module):
-            # Check if target tab is currently active
-            current_active_tab_index = target_tab_module.content_data.get('active_tab', 0)
-            current_active_tab = None
-            if 0 <= current_active_tab_index < len(target_tab_module.content_data['tabs']):
-                current_active_tab = target_tab_module.content_data['tabs'][current_active_tab_index]
-
-            if current_active_tab == tab_name:
-                # The target tab is already active, add the widget directly
-                self.add_module_to_tab_widget(target_tab_module, tab_name, module)
-            else:
-                # Switch to the target tab (this will recreate all widgets including the new one)
-                target_tab_module.content_data['active_tab'] = target_tab_module.content_data['tabs'].index(tab_name)
-                self._switch_active_tab(target_tab_module, tab_name)
-
-            self.app.set_modified(True)
-
-    def _handle_drop_on_main_canvas(self, module: Module):
-        """Handle dropping a module onto the main canvas"""
-        source_parent_tab = self.drag_data.get('parent_tab')
-
-        if source_parent_tab:
-            # Moving from a tab to main canvas
-            source_tab_module, source_tab_name = source_parent_tab
-            removed_module = source_tab_module.remove_module_from_tab(source_tab_name, module.id)
-            if removed_module:
-                self.remove_module_from_tab_widget(source_tab_module, source_tab_name, module.id)
-
-                # Add to main canvas
-                removed_module.position = len(self.app.active_modules)
-                self.app.active_modules.append(removed_module)
-                self.add_module_widget(removed_module)
-
-                self.app._update_module_positions()
-                self.app.set_modified(True)
-
-    def _cleanup_drag(self):
-        """Clean up drag and drop state with safety checks"""
-        self.is_dragging = False
-
-        if self.drag_preview:
-            try:
-                if self._safe_widget_exists(self.drag_preview):
-                    self.drag_preview.destroy()
-            except:
-                pass
-            self.drag_preview = None
-
-        if self.drop_zone_highlight and self._safe_widget_exists(self.drop_zone_highlight):
-            try:
-                if hasattr(self.drop_zone_highlight, '_original_color'):
-                    self.drop_zone_highlight.configure(fg_color=self.drop_zone_highlight._original_color)
-                else:
-                    self.drop_zone_highlight.configure(fg_color="gray15")
-            except tk.TclError:
-                pass
-            self.drop_zone_highlight = None
-
-        if self.drag_data and self.drag_data.get('source_widget'):
-            # Restore original appearance
-            source_widget = self.drag_data['source_widget']
-            if self._safe_widget_exists(source_widget):
-                try:
-                    # Determine if it's a top-level or nested module
-                    if hasattr(source_widget, '_parent_tab') and source_widget._parent_tab:
-                        source_widget.configure(fg_color="gray18")  # nested module color
-                    else:
-                        source_widget.configure(fg_color="gray15")  # top-level module color
-                except tk.TclError:
-                    pass
-
-        # Unbind root window events
-        try:
-            self.app.root.unbind('<B1-Motion>')
-            self.app.root.unbind('<ButtonRelease-1>')
-        except tk.TclError:
-            pass
-
-        self.drag_data = None
 
     def _move_module_up(self, module: Module, parent_tab: Optional[Tuple[TabModule, str]] = None):
         """Move module up in its context (main canvas or within a tab)"""
@@ -1664,6 +1335,9 @@ class CanvasPanel:
         """Clear all modules from canvas"""
         self.selected_widget = None
 
+        # Notify drag drop handler to clean up
+        self.drag_drop_handler.cleanup_on_canvas_clear()
+
         # Destroy all widgets safely
         widgets_to_destroy = list(self.module_widgets.values())
         for widget in widgets_to_destroy:
@@ -1747,7 +1421,7 @@ class CanvasPanel:
     def _safe_select_module_click(self, module: Module, parent_tab: Optional[Tuple[TabModule, str]] = None):
         """Handle module selection clicks (separate from drag) with safety checks"""
         try:
-            if not self.is_dragging:
+            if not self.drag_drop_handler.is_dragging:
                 self.app.select_module(module, parent_tab)
         except Exception as e:
             print(f"Error in module selection: {e}")
