@@ -1,1558 +1,825 @@
-    /* This is where we declare the font - right at the start of the style block */
-    @font-face {
-        font-family: 'Gin Round';
-        src: url('Assets/Gin_Round.otf') format('opentype');
-        font-weight: normal;
-        font-style: normal;
-        font-display: swap;
-    }
+/* This is where we declare the font - right at the start of the style block */
+@font-face {
+    font-family: 'Gin Round';
+    src: url('Assets/Gin_Round.otf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
 
-    :root {
-        --kodiak-red: #B22234;
-        --kodiak-brown: #4A3828;
-        --kodiak-dark-brown: #2A1810;
-        --kodiak-kraft: #D4B69A;
-        --kodiak-light-kraft: #E5D3C1;
-        --kodiak-cream: #F7F3EE;
-    }
+:root {
+    --kodiak-red: #B22234;
+    --kodiak-brown: #4A3828;
+    --kodiak-dark-brown: #2A1810;
+    --kodiak-kraft: #D4B69A;
+    --kodiak-light-kraft: #E5D3C1;
+    --kodiak-cream: #F7F3EE;
+}
 
-    body {
-        font-family: Georgia, serif;
-        line-height: 1.6;
-        margin: 0;
-        padding: 0;
-        background-color: var(--kodiak-kraft);
-        color: var(--kodiak-brown);
-        background-image: url('Assets/background.jpg');
-        background-repeat: repeat; /* This will tile the image */
-    }
+body {
+    font-family: Georgia, serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+    background-color: var(--kodiak-kraft);
+    color: var(--kodiak-brown);
+    background-image: url('Assets/background.jpg');
+    background-repeat: repeat; /* This will tile the image */
+}
 
-    .container {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 2rem;
-    }
-    /* Add these styles to your theme CSS files (kodiak.css and default.css) */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
 
-    /* Media content before/after styles */
+/* Media content before/after styles */
+.media-content-before,
+.media-content-after {
+    margin: 1rem 0;
+    color: var(--kodiak-brown, #4A3828);
+}
+
+.media-content-before {
+    margin-bottom: 1.5rem;
+}
+
+.media-content-after {
+    margin-top: 1.5rem;
+}
+
+/* Format content paragraphs */
+.media-content-before p,
+.media-content-after p {
+    margin: 0.5rem 0;
+    line-height: 1.6;
+}
+
+/* Bullet list styles */
+.media-content-before ul,
+.media-content-after ul {
+    margin: 0.5rem 0;
+    padding-left: 1.5rem;
+}
+
+.media-content-before ul li,
+.media-content-after ul li {
+    margin: 0.3rem 0;
+    list-style-type: none;
+    position: relative;
+}
+
+.media-content-before ul li::before,
+.media-content-after ul li::before {
+    content: "•";
+    position: absolute;
+    left: -1.2rem;
+    color: var(--kodiak-red, #B22234);
+    font-weight: bold;
+}
+
+/* Numbered list styles */
+.media-content-before ol,
+.media-content-after ol {
+    margin: 0.5rem 0;
+    padding-left: 1.8rem;
+    counter-reset: item;
+}
+
+.media-content-before ol li,
+.media-content-after ol li {
+    margin: 0.3rem 0;
+    list-style-type: none;
+    position: relative;
+    counter-increment: item;
+}
+
+.media-content-before ol li::before,
+.media-content-after ol li::before {
+    content: counter(item) ".";
+    position: absolute;
+    left: -1.8rem;
+    color: var(--kodiak-red, #B22234);
+    font-weight: bold;
+    min-width: 1.2rem;
+}
+
+/* Bold text within media content */
+.media-content-before strong,
+.media-content-after strong {
+    font-weight: bold;
+    color: var(--kodiak-dark-brown, #2A1810);
+}
+
+/* For default theme - similar styling */
+@media (prefers-color-scheme: light) {
     .media-content-before,
     .media-content-after {
-        margin: 1rem 0;
-        color: var(--kodiak-brown, #4A3828);
-    }
-
-    .media-content-before {
-        margin-bottom: 1.5rem;
-    }
-
-    .media-content-after {
-        margin-top: 1.5rem;
-    }
-
-    /* Format content paragraphs */
-    .media-content-before p,
-    .media-content-after p {
-        margin: 0.5rem 0;
-        line-height: 1.6;
-    }
-
-    /* Bullet list styles */
-    .media-content-before ul,
-    .media-content-after ul {
-        margin: 0.5rem 0;
-        padding-left: 1.5rem;
-    }
-
-    .media-content-before ul li,
-    .media-content-after ul li {
-        margin: 0.3rem 0;
-        list-style-type: none;
-        position: relative;
+        color: var(--text-color, #2c3e50);
     }
 
     .media-content-before ul li::before,
-    .media-content-after ul li::before {
-        content: "•";
-        position: absolute;
-        left: -1.2rem;
-        color: var(--kodiak-red, #B22234);
-        font-weight: bold;
-    }
-
-    /* Numbered list styles */
-    .media-content-before ol,
-    .media-content-after ol {
-        margin: 0.5rem 0;
-        padding-left: 1.8rem;
-        counter-reset: item;
-    }
-
-    .media-content-before ol li,
-    .media-content-after ol li {
-        margin: 0.3rem 0;
-        list-style-type: none;
-        position: relative;
-        counter-increment: item;
-    }
-
+    .media-content-after ul li::before,
     .media-content-before ol li::before,
     .media-content-after ol li::before {
-        content: counter(item) ".";
-        position: absolute;
-        left: -1.8rem;
-        color: var(--kodiak-red, #B22234);
-        font-weight: bold;
-        min-width: 1.2rem;
+        color: var(--secondary-color, #3498db);
     }
 
-    /* Bold text within media content */
     .media-content-before strong,
     .media-content-after strong {
-        font-weight: bold;
-        color: var(--kodiak-dark-brown, #2A1810);
-    }
-
-    /* For default theme - similar styling */
-    @media (prefers-color-scheme: light) {
-        .media-content-before,
-        .media-content-after {
-            color: var(--text-color, #2c3e50);
-        }
-
-        .media-content-before ul li::before,
-        .media-content-after ul li::before,
-        .media-content-before ol li::before,
-        .media-content-after ol li::before {
-            color: var(--secondary-color, #3498db);
-        }
-
-        .media-content-before strong,
-        .media-content-after strong {
-            color: var(--primary-color, #2c3e50);
-        }
-    }
-
-    .document-label {
-        background: var(--kodiak-red);
-        color: white;
-        padding: 0.5rem 2rem;
-        display: inline-block;
-        transform: rotate(-2deg);
-        margin-bottom: -1rem;
-        margin-left: 2rem;
-        font-family: Arial, sans-serif;
-        font-weight: bold;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        position: relative;
-        z-index: 2;
-    }
-
-    .header {
-        background-color: var(--kodiak-brown);
-        padding: 3rem 2rem 2rem;
-        position: relative;
-        overflow: hidden;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-
-    .header-content {
-        flex: 1;
-    }
-
-    .logo-container {
-        flex-shrink: 0;
-        width: 200px;
-        height: 200px;
-        margin-left: 2rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .logo-container img {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-    }
-
-    @media (max-width: 768px) {
-        .header {
-            flex-direction: column;
-            text-align: center;
-            gap: 2rem;
-        }
-
-        .logo-container {
-            margin-left: 0;
-            width: 100px;
-            height: 100px;
-        }
-    }
-
-    .header h1 {
-        font-family: 'Gin Round', Arial, sans-serif;  /* Using the font here */
-        font-weight: 800;
-        text-transform: uppercase;
-        color: var(--kodiak-kraft);
-        margin: 0;
-        font-size: 3rem;
-        letter-spacing: 2px;
-        line-height: 1.2;
-        font-size: 4rem;
-    }
-
-
-    .header p {
-        color: var(--kodiak-light-kraft);
-        margin: 1rem 0 0 0;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-    }
-
-    .header p::before {
-        content: '';
-        display: block;
-        width: 50px;
-        height: 2px;
-        background-color: var(--kodiak-red);
-    }
-
-    .content-wrapper {
-        background-color: var(--kodiak-cream);
-        padding: 2rem;
-        margin: 2rem 0;
-        position: relative;
-        border: 1px solid rgba(74, 56, 40, 0.2);
-    }
-
-    .table-container {
-        width: 100%;
-        overflow-x: auto;
-        margin: 1rem 0;
-    }
-
-    .custom-table {
-        width: auto; /* Changed from 100% to auto */
-        min-width: 50%; /* Add a minimum width */
-        border-collapse: collapse;
-        background: var(--kodiak-cream);
-        border: 1px solid var(--kodiak-kraft);
-        table-layout: auto; /* Add this to enable automatic column sizing */
-        white-space: nowrap; /* Prevents text wrapping */
-    }
-
-    .custom-table th,
-    .custom-table td {
-        padding: 0.75rem 1rem;
-        text-align: left;
-        border-bottom: 1px solid var(--kodiak-kraft);
-        border-right: 1px solid var(--kodiak-kraft); /* Add vertical lines */
-    }
-
-    /* Remove the right border from the last column */
-    .custom-table th:last-child,
-    .custom-table td:last-child {
-        border-right: none;
-    }
-
-    .custom-table th {
-        background: var(--kodiak-brown);
-        color: var(--kodiak-cream);
-        font-family: Arial, sans-serif;
-        text-transform: uppercase;
-        font-size: 0.9rem;
-        letter-spacing: 1px;
-    }
-
-    .custom-table tr:last-child td {
-        border-bottom: none;
-    }
-
-    .custom-table tr:hover {
-        background: white;
-    }
-
-    /* Optional: Add responsive styles */
-    @media (max-width: 768px) {
-        .table-container {
-            margin: 1rem -1rem;
-            padding: 0 1rem;
-        }
-    }
-
-    .tabs {
-        display: flex;
-        gap: 1rem;
-        margin-bottom: -1px;
-    }
-
-    .tab {
-        padding: 1rem 2rem;
-        background: var(--kodiak-brown);
-        color: var(--kodiak-cream);
-        border: none;
-        cursor: pointer;
-        font-family: Arial, sans-serif;
-        font-weight: bold;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        position: relative;
-        overflow: hidden;
-    }
-
-    .tab.active {
-        background: var(--kodiak-red);
-    }
-
-    .tab::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: 20px;
-        height: 100%;
-        background: linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.1) 50%);
-    }
-
-    .section-content {
-        display: none;
-        padding: 2rem;
-        background: white;
-        border: 1px solid var(--kodiak-kraft);
-    }
-
-    .section-content.active {
-        display: block;
-    }
-
-    .media-container {
-        margin: 2rem 0;
-        border-radius: 4px;
-        overflow: hidden;
-        border: 1px solid var(--kodiak-brown);
-        background: var(--kodiak-brown);
-        /* Use CSS custom properties with fallback values */
-        max-width: var(--media-max-width, 800px);
-        /* max-height: var(--media-max-height, 800px); */
-        margin-left: auto;
-        margin-right: auto;
-    }
-
-    .media-header {
-        background: var(--kodiak-brown);
-        color: var(--kodiak-cream);
-        padding: 0.40rem 1rem;
-        font-family: Arial, sans-serif;
-        font-size: 0.9rem;
-        display: flex;
-        align-items: center;
-        gap: 0.25rem;
-    }
-
-    .media-header.video::before {
-        content: '🎥';
-    }
-
-    .media-content {
-        position: relative;
-        padding: 0;
-        background-color: var(--kodiak-brown);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        line-height: 0; /* Add this line */
-    }
-
-    .media-content img {
-        cursor: pointer;
-    }
-
-    .media-grid {
-        display: grid;
-        gap: 2rem;
-        margin: 2rem 0;
-    }
-
-    /* Side by side layout */
-    .media-grid.side-by-side {
-        grid-template-columns: 1fr 1fr;
-    }
-
-    .media-grid .media-container {
-        margin: 0; /* Remove the default margins */
-        height: 100%; /* Ensure full height */
-        display: flex;
-        flex-direction: column;
-    }
-
-    .media-grid .media-content {
-        flex: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background-color: var(--kodiak-brown);
-    }
-
-    .media-grid .media-content img {
-        width: 100%;
-        height: auto;
-        max-height: 400px; /* Set a consistent max height */
-        object-fit: contain;
-    }
-
-    @media (max-width: 768px) {
-        .media-grid.side-by-side {
-            grid-template-columns: 1fr;
-        }
-    }
-
-    /* Tooltips */
-    .tooltip {
-        position: relative;
-        display: inline-block;
-        cursor: help;
-        border-bottom: 1.5px dotted var(--kodiak-red);
-        margin-bottom: -8px; /* This will pull the underline up closer to the text */
-    }
-
-
-    .tooltip .tooltip-text {
-        visibility: hidden;
-        width: 500px;
-        background-color: var(--kodiak-brown); /* Use your brand brown instead of #333 */
-        color: white;
-        text-align: center;
-        font-weight: 500; /* Make text slightly bolder */
-        padding: 8px 12px; /* Slightly more padding */
-        border-radius: 6px;
-        position: absolute;
-        z-index: 1;
-        bottom: 125%;
-        left: 50%;
-        margin-left: -250px;
-        opacity: 0;
-        white-space: normal;
-        line-height: 1.4;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        transition: opacity 0.3s;
-    }
-
-    .tooltip:hover .tooltip-text {
-        visibility: visible;
-        opacity: 1;
-    }
-
-    /* Enhance the hover state */
-    .tooltip:hover {
-        background-color: rgba(178, 34, 52, 0.1); /* Very light red background on hover */
-        border-radius: 2px;
-        transition: all 0.2s ease;
-    }
-
-    /* Back to Top Button */
-    .back-to-top {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        width: 50px;
-        height: 50px;
-        border-radius: 50%;
-        background: #4a3828 url('Assets/bear_paw.png') center/60% no-repeat;
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.3s ease;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    }
-
-    .back-to-top.visible {
-        opacity: 1;
-        pointer-events: auto;
-    }
-
-    .back-to-top:hover {
-        background: #776250 url('./Assets/bear_paw.png') center/60% no-repeat;
-    }
-    
-    /* Modal styles */
-    .modal {
-        display: none;
-        position: fixed;
-        z-index: 1000;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0, 0, 0, 0.8);
-        backdrop-filter: blur(5px);
-    }
-
-    .modal-content {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100%;
-        padding: 20px;
-    }
-
-    .modal-content img {
-        max-width: 90%;
-        max-height: 90vh;
-        object-fit: contain;
-        border: 2px solid var(--kodiak-kraft);
-        background-color: white;
-        box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
-    }
-
-    .media-content iframe {
-        position: relative;
-        width: 100%;
-        /* Use CSS custom property for height with fallback */
-        height: var(--media-height, 400px);
-        border: none;
-    }
-
-    .media-caption {
-        padding: .75rem;
-        background: var(--kodiak-cream);
-        border-top: 1px solid var(--kodiak-kraft);
-        font-size: 0.9rem;
-        color: var(--kodiak-brown);
-    }
-
-    @media (max-width: 768px) {
-        .media-container {
-            max-width: 100%;
-        }
-        
-        .media-content iframe {
-            height: var(--media-mobile-height, 300px);
-        }
-    }
-
-    .disclaimer-box {
-        background: var(--kodiak-light-kraft);
-        padding: 2rem;
-        margin-bottom: 2rem;
-        position: relative;
-        border-left: 4px solid var(--kodiak-red);
-    }
-
-    .disclaimer-box::before {
-        content: 'IMPORTANT!';
-        position: absolute;
-        top: -12px;
-        left: 1rem;
-        background: var(--kodiak-red);
-        color: white;
-        padding: 0.25rem 1rem;
-        font-size: 0.8rem;
-        font-family: Arial, sans-serif;
-        font-weight: bold;
-        letter-spacing: 1px;
-    }
-
-    .steps-container {
-        display: grid;
-        gap: 2rem;
-        background: var(--kodiak-cream);
-        padding: 2rem;
-        border-radius: 4px;
-        border: 1px solid var(--kodiak-kraft);
-    }
-
-    .step-card {
-        background: white;
-        padding: 2rem;
-        border: 1px solid var(--kodiak-kraft);
-        position: relative;
-    }
-
-    .step-number {
-        position: absolute;
-        top: -1.6rem;
-        left: -1.45rem;
-        width: 3.3rem;
-        height: 3.3rem;
-        background-image: url('Assets/bear_red.png');
-        background-size: contain;
-        background-repeat: no-repeat;
-        background-position: center;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-family: Arial, sans-serif;
-        font-weight: bold;
-        color: white; /* Keeping the number white for visibility */
-    }
-
-    .step-card h3 {
-        font-family: Arial, sans-serif;
-        color: var(--kodiak-brown);
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        margin: 0 0 1rem 0;
-    }
-
-    /* Update issues container styling */
-    .issues-container {
-        margin-top: 2rem;
-        display: grid;
-        gap: 1.5rem;
-        background: var(--kodiak-light-kraft);
-        padding: 2rem;
-        border-radius: 4px;
-    }
-
-    .issue-card {
-        background: white;
-        padding: 1.5rem;
-        border: 1px solid var(--kodiak-kraft);
-        position: relative;
-    }
-
-    .issue-card h4 {
-        color: var(--kodiak-red);
-        font-family: Arial, sans-serif;
-        margin: 0 0 1rem 0;
-        font-size: 1.1rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-
-    .solution {
-        background: var(--kodiak-cream);
-        padding: 1rem;
-        margin-top: 1rem;
-        border-left: 3px solid var(--kodiak-red);
-    }
-
-    .solution strong {
-        color: var(--kodiak-red);
-        display: block;
-        margin-bottom: 0.5rem;
-    }
-
-    .footer {
-        background: var(--kodiak-brown);
-        color: var(--kodiak-cream);
-        padding: 2rem;
-        text-align: center;
-        font-family: Arial, sans-serif;
-        letter-spacing: 1px;
-        text-transform: uppercase;
-        font-size: 0.9rem;
-        position: relative;  /* Added this */
-        overflow: hidden;    /* Added this */
-    }
-
-    .footer-image {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        height: auto;
-        object-fit: cover;
-        z-index: 0;         /* Place behind text */
-        opacity: 0.3;       /* Optional: makes image subtle */
-    }
-
-    .footer-content {
-        position: relative; /* Added this */
-        z-index: 1;        /* Place above image */
-    }
-
-    .section-title {
-        margin: 4rem 0 2.5rem 0;
-        position: relative;
-        padding-top: 2rem;
-    }
-
-    .section-title::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 1px;
-        background: linear-gradient(
-            90deg, 
-            var(--kodiak-kraft) 0%, 
-            var(--kodiak-brown) 50%, 
-            var(--kodiak-kraft) 100%
-        );
-    }
-
-    .section-title h2 {
-        font-family: 'Gin Round', Arial, sans-serif;  /* And here */
-        font-weight: 800;
-        color: var(--kodiak-brown);
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        margin: 0 0 0.5rem 0;
-        padding-left: 1rem;
-        border-left: 4px solid var(--kodiak-red);
-        line-height: 1.2;
-        font-size: 2.25rem
-    }
-
-    .section-title p {
-        color: var(--kodiak-brown);
-        opacity: 0.8;
-        margin: 0.5rem 0 0 calc(1rem + 4px);
-        font-size: 0.9rem;
-    }
-    
-    @media (max-width: 768px) {
-        .container {    /* This is where we declare the font - right at the start of the style block */
-    @font-face {
-        font-family: 'Gin Round';
-        src: url('Assets/Gin_Round.otf') format('opentype');
-        font-weight: normal;
-        font-style: normal;
-        font-display: swap;
-    }
-
-    :root {
-        --kodiak-red: #B22234;
-        --kodiak-brown: #4A3828;
-        --kodiak-dark-brown: #2A1810;
-        --kodiak-kraft: #D4B69A;
-        --kodiak-light-kraft: #E5D3C1;
-        --kodiak-cream: #F7F3EE;
-    }
-
-    body {
-        font-family: Georgia, serif;
-        line-height: 1.6;
-        margin: 0;
-        padding: 0;
-        background-color: var(--kodiak-kraft);
-        color: var(--kodiak-brown);
-        background-image: url('Assets/background.jpg');
-        background-repeat: repeat; /* This will tile the image */
-    }
-
+        color: var(--primary-color, #2c3e50);
+    }
+}
+
+.document-label {
+    background: var(--kodiak-red);
+    color: white;
+    padding: 0.5rem 2rem;
+    display: inline-block;
+    transform: rotate(-2deg);
+    margin-bottom: -1rem;
+    margin-left: 2rem;
+    font-family: Arial, sans-serif;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    position: relative;
+    z-index: 2;
+}
+
+.header {
+    background-color: var(--kodiak-brown);
+    padding: 3rem 2rem 2rem;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header-content {
+    flex: 1;
+}
+
+.logo-container {
+    flex-shrink: 0;
+    width: 200px;
+    height: 200px;
+    margin-left: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.logo-container img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.header h1 {
+    font-family: 'Gin Round', Arial, sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--kodiak-kraft);
+    margin: 0;
+    font-size: 4rem;
+    letter-spacing: 2px;
+    line-height: 1.2;
+}
+
+.header p {
+    color: var(--kodiak-light-kraft);
+    margin: 1rem 0 0 0;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.header p::before {
+    content: '';
+    display: block;
+    width: 50px;
+    height: 2px;
+    background-color: var(--kodiak-red);
+}
+
+.content-wrapper {
+    background-color: var(--kodiak-cream);
+    padding: 2rem;
+    margin: 2rem 0;
+    position: relative;
+    border: 1px solid rgba(74, 56, 40, 0.2);
+}
+
+.table-container {
+    width: 100%;
+    overflow-x: auto;
+    margin: 1rem 0;
+}
+
+.custom-table {
+    width: auto;
+    min-width: 50%;
+    border-collapse: collapse;
+    background: var(--kodiak-cream);
+    border: 1px solid var(--kodiak-kraft);
+    table-layout: auto;
+    white-space: nowrap;
+}
+
+.custom-table th,
+.custom-table td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--kodiak-kraft);
+    border-right: 1px solid var(--kodiak-kraft);
+}
+
+.custom-table th:last-child,
+.custom-table td:last-child {
+    border-right: none;
+}
+
+.custom-table th {
+    background: var(--kodiak-brown);
+    color: var(--kodiak-cream);
+    font-family: Arial, sans-serif;
+    text-transform: uppercase;
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+}
+
+.custom-table tr:last-child td {
+    border-bottom: none;
+}
+
+.custom-table tr:hover {
+    background: white;
+}
+
+.tabs {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: -1px;
+}
+
+.tab {
+    padding: 1rem 2rem;
+    background: var(--kodiak-brown);
+    color: var(--kodiak-cream);
+    border: none;
+    cursor: pointer;
+    font-family: Arial, sans-serif;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    position: relative;
+    overflow: hidden;
+}
+
+.tab.active {
+    background: var(--kodiak-red);
+}
+
+.tab::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 20px;
+    height: 100%;
+    background: linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.1) 50%);
+}
+
+.section-content {
+    display: none;
+    padding: 2rem;
+    background: white;
+    border: 1px solid var(--kodiak-kraft);
+}
+
+.section-content.active {
+    display: block;
+}
+
+.media-container {
+    margin: 2rem 0;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid var(--kodiak-brown);
+    background: var(--kodiak-brown);
+    max-width: var(--media-max-width, 800px);
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.media-header {
+    background: var(--kodiak-brown);
+    color: var(--kodiak-cream);
+    padding: 0.40rem 1rem;
+    font-family: Arial, sans-serif;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.media-header.video::before {
+    content: '🎥';
+}
+
+.media-content {
+    position: relative;
+    padding: 0;
+    background-color: var(--kodiak-brown);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    line-height: 0;
+}
+
+.media-content img {
+    cursor: pointer;
+}
+
+.media-content iframe {
+    position: relative;
+    width: 100%;
+    height: var(--media-height, 400px);
+    border: none;
+}
+
+.media-caption {
+    padding: .75rem;
+    background: var(--kodiak-cream);
+    border-top: 1px solid var(--kodiak-kraft);
+    font-size: 0.9rem;
+    color: var(--kodiak-brown);
+}
+
+.media-grid {
+    display: grid;
+    gap: 2rem;
+    margin: 2rem 0;
+}
+
+.media-grid.side-by-side {
+    grid-template-columns: 1fr 1fr;
+}
+
+.media-grid .media-container {
+    margin: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.media-grid .media-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--kodiak-brown);
+}
+
+.media-grid .media-content img {
+    width: 100%;
+    height: auto;
+    max-height: 400px;
+    object-fit: contain;
+}
+
+/* Tooltips */
+.tooltip {
+    position: relative;
+    display: inline-block;
+    cursor: help;
+    border-bottom: 1.5px dotted var(--kodiak-red);
+    margin-bottom: -8px;
+}
+
+.tooltip .tooltip-text {
+    visibility: hidden;
+    width: 500px;
+    background-color: var(--kodiak-brown);
+    color: white;
+    text-align: center;
+    font-weight: 500;
+    padding: 8px 12px;
+    border-radius: 6px;
+    position: absolute;
+    z-index: 1;
+    bottom: 125%;
+    left: 50%;
+    margin-left: -250px;
+    opacity: 0;
+    white-space: normal;
+    line-height: 1.4;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    transition: opacity 0.3s;
+}
+
+.tooltip:hover .tooltip-text {
+    visibility: visible;
+    opacity: 1;
+}
+
+.tooltip:hover {
+    background-color: rgba(178, 34, 52, 0.1);
+    border-radius: 2px;
+    transition: all 0.2s ease;
+}
+
+/* Back to Top Button */
+.back-to-top {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: #4a3828 url('Assets/bear_paw.png') center/60% no-repeat;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.back-to-top.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.back-to-top:hover {
+    background: #776250 url('./Assets/bear_paw.png') center/60% no-repeat;
+}
+
+/* Modal styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(5px);
+}
+
+.modal-content {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    padding: 20px;
+}
+
+.modal-content img {
+    max-width: 90%;
+    max-height: 90vh;
+    object-fit: contain;
+    border: 2px solid var(--kodiak-kraft);
+    background-color: white;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+}
+
+.disclaimer-box {
+    background: var(--kodiak-light-kraft);
+    padding: 2rem;
+    margin-bottom: 2rem;
+    position: relative;
+    border-left: 4px solid var(--kodiak-red);
+}
+
+.disclaimer-box::before {
+    content: 'IMPORTANT!';
+    position: absolute;
+    top: -12px;
+    left: 1rem;
+    background: var(--kodiak-red);
+    color: white;
+    padding: 0.25rem 1rem;
+    font-size: 0.8rem;
+    font-family: Arial, sans-serif;
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+
+.steps-container {
+    display: grid;
+    gap: 2rem;
+    background: var(--kodiak-cream);
+    padding: 2rem;
+    border-radius: 4px;
+    border: 1px solid var(--kodiak-kraft);
+    margin: 2rem 0;
+}
+
+.step-card {
+    background: white;
+    padding: 2rem;
+    border: 1px solid var(--kodiak-kraft);
+    position: relative;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.step-number {
+    position: absolute;
+    top: -1.6rem;
+    left: -1.45rem;
+    width: 3.3rem;
+    height: 3.3rem;
+    background-image: url('Assets/bear_red.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: Arial, sans-serif;
+    font-weight: bold;
+    color: white;
+    font-size: 1.2rem;
+}
+
+.step-card h3 {
+    font-family: Arial, sans-serif;
+    color: var(--kodiak-brown);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 0 0 1rem 0;
+}
+
+.step-card .media-container {
+    margin: 1rem 0;
+}
+
+.step-card .table-module {
+    margin: 1rem 0;
+}
+
+.step-card .text-module {
+    margin: 0;
+}
+
+/* FIXED: Remove border from issue cards inside step cards */
+.step-card .issue-card {
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 1.4rem !important; /* Slightly less padding to account for missing border */
+}
+
+/* Issues container for issue cards */
+.issues-container {
+    margin-top: 2rem;
+    display: grid;
+    gap: 1.5rem;
+    background: var(--kodiak-light-kraft);
+    padding: 2rem;
+    border-radius: 4px;
+}
+
+.issue-card {
+    background: white;
+    padding: 1.5rem;
+    border: 1px solid var(--kodiak-kraft);
+    position: relative;
+    border-radius: 4px;
+}
+
+.issue-card h4 {
+    color: var(--kodiak-red);
+    font-family: Arial, sans-serif;
+    margin: 0 0 1rem 0;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* FIXED: Remove the ::before that was adding duplicate emoji */
+.issue-card h4::before {
+    content: none;
+}
+
+.solution {
+    background: var(--kodiak-cream);
+    padding: 1rem;
+    margin-top: 1rem;
+    border-left: 3px solid var(--kodiak-red);
+}
+
+.solution strong {
+    color: var(--kodiak-red);
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.footer {
+    background: var(--kodiak-brown);
+    color: var(--kodiak-cream);
+    padding: 2rem;
+    text-align: center;
+    font-family: Arial, sans-serif;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    font-size: 0.9rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.footer-image {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: auto;
+    object-fit: cover;
+    z-index: 0;
+    opacity: 0.3;
+}
+
+.footer-content {
+    position: relative;
+    z-index: 1;
+}
+
+.section-title {
+    margin: 4rem 0 2.5rem 0;
+    position: relative;
+    padding-top: 2rem;
+}
+
+.section-title::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(
+        90deg,
+        var(--kodiak-kraft) 0%,
+        var(--kodiak-brown) 50%,
+        var(--kodiak-kraft) 100%
+    );
+}
+
+.section-title h2 {
+    font-family: 'Gin Round', Arial, sans-serif;
+    font-weight: 800;
+    color: var(--kodiak-brown);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin: 0 0 0.5rem 0;
+    padding-left: 1rem;
+    border-left: 4px solid var(--kodiak-red);
+    line-height: 1.2;
+    font-size: 2.25rem;
+}
+
+.section-title p {
+    color: var(--kodiak-brown);
+    opacity: 0.8;
+    margin: 0.5rem 0 0 calc(1rem + 4px);
+    font-size: 0.9rem;
+}
+
+/* Enhanced Media Module Styles */
+.enhanced-media-module {
+    margin: 1.5rem 0;
+}
+
+.enhanced-media-module h3 {
+    font-family: Arial, sans-serif;
+    color: var(--kodiak-brown, #4A3828);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 0 0 1rem 0;
+    font-weight: bold;
+}
+
+.enhanced-media-module p {
+    margin: 1rem 0;
+    line-height: 1.6;
+}
+
+.enhanced-media-module ul {
+    margin: 1rem 0;
+    padding-left: 2rem;
+}
+
+.enhanced-media-module li {
+    margin: 0.5rem 0;
+    line-height: 1.5;
+}
+
+.enhanced-media-module > h3:first-child {
+    margin-top: 0;
+}
+
+.enhanced-media-module > p:first-child,
+.enhanced-media-module > ul:first-child {
+    margin-top: 0;
+}
+
+.enhanced-media-module > p:last-child,
+.enhanced-media-module > ul:last-child {
+    margin-bottom: 0;
+}
+
+.enhanced-media-module p + .media-container,
+.enhanced-media-module ul + .media-container {
+    margin-top: 1.5rem;
+}
+
+.enhanced-media-module .media-container + p,
+.enhanced-media-module .media-container + ul {
+    margin-top: 1.5rem;
+}
+
+.enhanced-media-module h3 + p,
+.enhanced-media-module h3 + ul {
+    margin-top: 0.5rem;
+}
+
+.enhanced-media-module ul li {
+    position: relative;
+}
+
+.enhanced-media-module ul li strong {
+    color: var(--kodiak-brown, #4A3828);
+    font-weight: bold;
+}
+
+.enhanced-media-module p + ul {
+    margin-top: 0.5rem;
+}
+
+.enhanced-media-module ul + p {
+    margin-top: 1rem;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
     .container {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 2rem;
-    }
-
-    .document-label {
-        background: var(--kodiak-red);
-        color: white;
-        padding: 0.5rem 2rem;
-        display: inline-block;
-        transform: rotate(-2deg);
-        margin-bottom: -1rem;
-        margin-left: 2rem;
-        font-family: Arial, sans-serif;
-        font-weight: bold;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        position: relative;
-        z-index: 2;
-    }
-
-    .header {
-        background-color: var(--kodiak-brown);
-        padding: 3rem 2rem 2rem;
-        position: relative;
-        overflow: hidden;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-
-    .header-content {
-        flex: 1;
-    }
-
-    .logo-container {
-        flex-shrink: 0;
-        width: 200px;
-        height: 200px;
-        margin-left: 2rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .logo-container img {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-    }
-
-    @media (max-width: 768px) {
-        .header {
-            flex-direction: column;
-            text-align: center;
-            gap: 2rem;
-        }
-
-        .logo-container {
-            margin-left: 0;
-            width: 100px;
-            height: 100px;
-        }
-    }
-
-    .header h1 {
-        font-family: 'Gin Round', Arial, sans-serif;  /* Using the font here */
-        font-weight: 800;
-        text-transform: uppercase;
-        color: var(--kodiak-kraft);
-        margin: 0;
-        font-size: 3rem;
-        letter-spacing: 2px;
-        line-height: 1.2;
-        font-size: 4rem;
-    }
-
-
-    .header p {
-        color: var(--kodiak-light-kraft);
-        margin: 1rem 0 0 0;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-    }
-
-    .header p::before {
-        content: '';
-        display: block;
-        width: 50px;
-        height: 2px;
-        background-color: var(--kodiak-red);
-    }
-
-    .content-wrapper {
-        background-color: var(--kodiak-cream);
-        padding: 2rem;
-        margin: 2rem 0;
-        position: relative;
-        border: 1px solid rgba(74, 56, 40, 0.2);
-    }
-
-    .table-container {
-        width: 100%;
-        overflow-x: auto;
-        margin: 1rem 0;
-    }
-
-    .custom-table {
-        width: auto; /* Changed from 100% to auto */
-        min-width: 50%; /* Add a minimum width */
-        border-collapse: collapse;
-        background: var(--kodiak-cream);
-        border: 1px solid var(--kodiak-kraft);
-        table-layout: auto; /* Add this to enable automatic column sizing */
-        white-space: nowrap; /* Prevents text wrapping */
-    }
-
-    .custom-table th,
-    .custom-table td {
-        padding: 0.75rem 1rem;
-        text-align: left;
-        border-bottom: 1px solid var(--kodiak-kraft);
-        border-right: 1px solid var(--kodiak-kraft); /* Add vertical lines */
-    }
-
-    /* Remove the right border from the last column */
-    .custom-table th:last-child,
-    .custom-table td:last-child {
-        border-right: none;
-    }
-
-    .custom-table th {
-        background: var(--kodiak-brown);
-        color: var(--kodiak-cream);
-        font-family: Arial, sans-serif;
-        text-transform: uppercase;
-        font-size: 0.9rem;
-        letter-spacing: 1px;
-    }
-
-    .custom-table tr:last-child td {
-        border-bottom: none;
-    }
-
-    .custom-table tr:hover {
-        background: white;
-    }
-
-    /* Optional: Add responsive styles */
-    @media (max-width: 768px) {
-        .table-container {
-            margin: 1rem -1rem;
-            padding: 0 1rem;
-        }
+        padding: 1rem;
     }
 
     .tabs {
-        display: flex;
-        gap: 1rem;
-        margin-bottom: -1px;
-    }
-
-    .tab {
-        padding: 1rem 2rem;
-        background: var(--kodiak-brown);
-        color: var(--kodiak-cream);
-        border: none;
-        cursor: pointer;
-        font-family: Arial, sans-serif;
-        font-weight: bold;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        position: relative;
-        overflow: hidden;
-    }
-
-    .tab.active {
-        background: var(--kodiak-red);
-    }
-
-    .tab::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: 20px;
-        height: 100%;
-        background: linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.1) 50%);
-    }
-
-    .section-content {
-        display: none;
-        padding: 2rem;
-        background: white;
-        border: 1px solid var(--kodiak-kraft);
-    }
-
-    .section-content.active {
-        display: block;
-    }
-
-    .media-container {
-        margin: 2rem 0;
-        border-radius: 4px;
-        overflow: hidden;
-        border: 1px solid var(--kodiak-brown);
-        background: var(--kodiak-brown);
-        /* Use CSS custom properties with fallback values */
-        max-width: var(--media-max-width, 800px);
-        /* max-height: var(--media-max-height, 800px); */
-        margin-left: auto;
-        margin-right: auto;
-    }
-
-    .media-header {
-        background: var(--kodiak-brown);
-        color: var(--kodiak-cream);
-        padding: 0.40rem 1rem;
-        font-family: Arial, sans-serif;
-        font-size: 0.9rem;
-        display: flex;
-        align-items: center;
-        gap: 0.25rem;
-    }
-
-    .media-header.video::before {
-        content: '🎥';
-    }
-
-    .media-content {
-        position: relative;
-        padding: 0;
-        background-color: var(--kodiak-brown);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        line-height: 0; /* Add this line */
-    }
-
-    .media-content img {
-        cursor: pointer;
-    }
-
-    .media-grid {
-        display: grid;
-        gap: 2rem;
-        margin: 2rem 0;
-    }
-
-    /* Side by side layout */
-    .media-grid.side-by-side {
-        grid-template-columns: 1fr 1fr;
-    }
-
-    .media-grid .media-container {
-        margin: 0; /* Remove the default margins */
-        height: 100%; /* Ensure full height */
-        display: flex;
         flex-direction: column;
     }
 
-    .media-grid .media-content {
-        flex: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background-color: var(--kodiak-brown);
-    }
-
-    .media-grid .media-content img {
-        width: 100%;
-        height: auto;
-        max-height: 400px; /* Set a consistent max height */
-        object-fit: contain;
-    }
-
-    @media (max-width: 768px) {
-        .media-grid.side-by-side {
-            grid-template-columns: 1fr;
-        }
-    }
-
-    /* Tooltips */
-    .tooltip {
-        position: relative;
-        display: inline-block;
-        cursor: help;
-        border-bottom: 1.5px dotted var(--kodiak-red);
-        margin-bottom: -8px; /* This will pull the underline up closer to the text */
-    }
-
-
-    .tooltip .tooltip-text {
-        visibility: hidden;
-        width: 500px;
-        background-color: var(--kodiak-brown); /* Use your brand brown instead of #333 */
-        color: white;
+    .header {
+        flex-direction: column;
         text-align: center;
-        font-weight: 500; /* Make text slightly bolder */
-        padding: 8px 12px; /* Slightly more padding */
-        border-radius: 6px;
-        position: absolute;
-        z-index: 1;
-        bottom: 125%;
-        left: 50%;
-        margin-left: -250px;
-        opacity: 0;
-        white-space: normal;
-        line-height: 1.4;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        transition: opacity 0.3s;
+        gap: 2rem;
     }
 
-    .tooltip:hover .tooltip-text {
-        visibility: visible;
-        opacity: 1;
+    .logo-container {
+        margin-left: 0;
+        width: 100px;
+        height: 100px;
     }
 
-    /* Enhance the hover state */
-    .tooltip:hover {
-        background-color: rgba(178, 34, 52, 0.1); /* Very light red background on hover */
-        border-radius: 2px;
-        transition: all 0.2s ease;
+    .header h1 {
+        font-size: 2rem;
     }
 
-    /* Back to Top Button */
-    .back-to-top {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        width: 50px;
-        height: 50px;
-        border-radius: 50%;
-        background: #4a3828 url('Assets/bear_paw.png') center/60% no-repeat;
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.3s ease;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    }
-
-    .back-to-top.visible {
-        opacity: 1;
-        pointer-events: auto;
-    }
-
-    .back-to-top:hover {
-        background: #776250 url('./Assets/bear_paw.png') center/60% no-repeat;
-    }
-    
-    /* Modal styles */
-    .modal {
-        display: none;
-        position: fixed;
-        z-index: 1000;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0, 0, 0, 0.8);
-        backdrop-filter: blur(5px);
-    }
-
-    .modal-content {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100%;
-        padding: 20px;
-    }
-
-    .modal-content img {
-        max-width: 90%;
-        max-height: 90vh;
-        object-fit: contain;
-        border: 2px solid var(--kodiak-kraft);
-        background-color: white;
-        box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+    .media-container {
+        max-width: 100%;
     }
 
     .media-content iframe {
-        position: relative;
-        width: 100%;
-        /* Use CSS custom property for height with fallback */
-        height: var(--media-height, 400px);
-        border: none;
+        height: var(--media-mobile-height, 300px);
     }
 
-    .media-caption {
-        padding: .75rem;
-        background: var(--kodiak-cream);
-        border-top: 1px solid var(--kodiak-kraft);
-        font-size: 0.9rem;
-        color: var(--kodiak-brown);
+    .media-grid.side-by-side {
+        grid-template-columns: 1fr;
     }
 
-    @media (max-width: 768px) {
-        .media-container {
-            max-width: 100%;
-        }
-        
-        .media-content iframe {
-            height: var(--media-mobile-height, 300px);
-        }
+    .table-container {
+        margin: 1rem -1rem;
+        padding: 0 1rem;
     }
-
-    .disclaimer-box {
-        background: var(--kodiak-light-kraft);
-        padding: 2rem;
-        margin-bottom: 2rem;
-        position: relative;
-        border-left: 4px solid var(--kodiak-red);
-    }
-
-    .disclaimer-box::before {
-        content: 'IMPORTANT!';
-        position: absolute;
-        top: -12px;
-        left: 1rem;
-        background: var(--kodiak-red);
-        color: white;
-        padding: 0.25rem 1rem;
-        font-size: 0.8rem;
-        font-family: Arial, sans-serif;
-        font-weight: bold;
-        letter-spacing: 1px;
-    }
-
-    .steps-container {
-        display: grid;
-        gap: 2rem;
-        background: var(--kodiak-cream);
-        padding: 2rem;
-        border-radius: 4px;
-        border: 1px solid var(--kodiak-kraft);
-    }
-
-    .step-card {
-        background: white;
-        padding: 2rem;
-        border: 1px solid var(--kodiak-kraft);
-        position: relative;
-    }
-
-    .step-number {
-        position: absolute;
-        top: -1.6rem;
-        left: -1.45rem;
-        width: 3.3rem;
-        height: 3.3rem;
-        background-image: url('Assets/bear_red.png');
-        background-size: contain;
-        background-repeat: no-repeat;
-        background-position: center;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-family: Arial, sans-serif;
-        font-weight: bold;
-        color: white; /* Keeping the number white for visibility */
-    }
-
-    .step-card h3 {
-        font-family: Arial, sans-serif;
-        color: var(--kodiak-brown);
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        margin: 0 0 1rem 0;
-    }
-
-    .steps-container {
-        display: grid;
-        gap: 2rem;
-        background: var(--kodiak-cream, #F7F3EE);
-        padding: 2rem;
-        border-radius: 4px;
-        border: 1px solid var(--kodiak-kraft, #D4B69A);
-        margin: 2rem 0;
-    }
-
-    .step-card {
-        background: white;
-        padding: 2rem;
-        border: 1px solid var(--kodiak-kraft, #D4B69A);
-        position: relative;
-        border-radius: 4px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-
-    .step-number {
-        position: absolute;
-        top: -1.6rem;
-        left: -1.45rem;
-        width: 3.3rem;
-        height: 3.3rem;
-        background-image: url('Assets/bear_red.png');
-        background-size: contain;
-        background-repeat: no-repeat;
-        background-position: center;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-family: Arial, sans-serif;
-        font-weight: bold;
-        color: white;
-        font-size: 1.2rem;
-    }
-
-    /* Style for modules when they're inside step cards */
-    .step-card h3 {
-        font-family: Arial, sans-serif;
-        color: var(--kodiak-brown);
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        margin: 0 0 1rem 0;
-    }
-
-    .step-card .media-container {
-        margin: 1rem 0;
-    }
-
-    .step-card .table-module {
-        margin: 1rem 0;
-    }
-
-    .step-card .text-module {
-        margin: 0;
-    }
-
-    .step-card .issue-card {
-        border: none;
-        border-radius: 0;
-    }
-    /* Issues container for issue cards */
-    .issues-container {
-        margin-top: 2rem;
-        display: grid;
-        gap: 1.5rem;
-        background: var(--kodiak-light-kraft, #E5D3C1);
-        padding: 2rem;
-        border-radius: 4px;
-    }
-
-    .issue-card {
-        background: white;
-        padding: 1.5rem;
-        border: 1px solid var(--kodiak-kraft, #D4B69A);
-        position: relative;
-        border-radius: 4px;
-    }
-
-    /* Update issues container styling */
-    .issues-container {
-        margin-top: 2rem;
-        display: grid;
-        gap: 1.5rem;
-        background: var(--kodiak-light-kraft);
-        padding: 2rem;
-        border-radius: 4px;
-    }
-
-    .issue-card {
-        background: white;
-        padding: 1.5rem;
-        border: 1px solid var(--kodiak-kraft);
-        position: relative;
-    }
-
-    .issue-card h4 {
-        color: var(--kodiak-red);
-        font-family: Arial, sans-serif;
-        margin: 0 0 1rem 0;
-        font-size: 1.1rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-
-    .issue-card h4::before {
-        content: '⚠️';
-        font-size: 1.2rem;
-    }
-
-    .solution {
-        background: var(--kodiak-cream);
-        padding: 1rem;
-        margin-top: 1rem;
-        border-left: 3px solid var(--kodiak-red);
-    }
-
-    .solution strong {
-        color: var(--kodiak-red);
-        display: block;
-        margin-bottom: 0.5rem;
-    }
-
-    .footer {
-        background: var(--kodiak-brown);
-        color: var(--kodiak-cream);
-        padding: 2rem;
-        text-align: center;
-        font-family: Arial, sans-serif;
-        letter-spacing: 1px;
-        text-transform: uppercase;
-        font-size: 0.9rem;
-        position: relative;  /* Added this */
-        overflow: hidden;    /* Added this */
-    }
-
-    .footer-image {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        height: auto;
-        object-fit: cover;
-        z-index: 0;         /* Place behind text */
-        opacity: 0.3;       /* Optional: makes image subtle */
-    }
-
-    .footer-content {
-        position: relative; /* Added this */
-        z-index: 1;        /* Place above image */
-    }
-
-    .section-title {
-        margin: 4rem 0 2.5rem 0;
-        position: relative;
-        padding-top: 2rem;
-    }
-
-    .section-title::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 1px;
-        background: linear-gradient(
-            90deg, 
-            var(--kodiak-kraft) 0%, 
-            var(--kodiak-brown) 50%, 
-            var(--kodiak-kraft) 100%
-        );
-    }
-
-    .section-title h2 {
-        font-family: 'Gin Round', Arial, sans-serif;  /* And here */
-        font-weight: 800;
-        color: var(--kodiak-brown);
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        margin: 0 0 0.5rem 0;
-        padding-left: 1rem;
-        border-left: 4px solid var(--kodiak-red);
-        line-height: 1.2;
-        font-size: 2.25rem
-    }
-
-    .section-title p {
-        color: var(--kodiak-brown);
-        opacity: 0.8;
-        margin: 0.5rem 0 0 calc(1rem + 4px);
-        font-size: 0.9rem;
-    }
-
-    /* Enhanced Media Module Styles - Add to your theme CSS */
 
     .enhanced-media-module {
-        margin: 1.5rem 0;
+        margin: 1rem 0;
     }
 
-    /* Module title styling - matches step-card h3 format */
     .enhanced-media-module h3 {
-        font-family: Arial, sans-serif;
-        color: var(--kodiak-brown, #4A3828);
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        margin: 0 0 1rem 0;
-        font-weight: bold;
+        font-size: 1.1rem;
     }
 
-    /* Text content before and after media */
-    .enhanced-media-module p {
-        margin: 1rem 0;
-        line-height: 1.6;
+    .enhanced-media-module p,
+    .enhanced-media-module ul,
+    .enhanced-media-module ol {
+        font-size: 0.95rem;
     }
-
-    .enhanced-media-module ul {
-        margin: 1rem 0;
-        padding-left: 2rem;
-    }
-
-    .enhanced-media-module li {
-        margin: 0.5rem 0;
-        line-height: 1.5;
-    }
-
-    /* Ensure proper spacing between content sections */
-    .enhanced-media-module > h3:first-child {
-        margin-top: 0;
-    }
-
-    .enhanced-media-module > p:first-child,
-    .enhanced-media-module > ul:first-child {
-        margin-top: 0;
-    }
-
-    .enhanced-media-module > p:last-child,
-    .enhanced-media-module > ul:last-child {
-        margin-bottom: 0;
-    }
-
-    /* Improved spacing when content comes before/after media */
-    .enhanced-media-module p + .media-container,
-    .enhanced-media-module ul + .media-container {
-        margin-top: 1.5rem;
-    }
-
-    .enhanced-media-module .media-container + p,
-    .enhanced-media-module .media-container + ul {
-        margin-top: 1.5rem;
-    }
-
-    /* Better spacing between title and content */
-    .enhanced-media-module h3 + p,
-    .enhanced-media-module h3 + ul {
-        margin-top: 0.5rem;
-    }
-
-    /* Enhanced list styling for Kodiak theme */
-    .enhanced-media-module ul li {
-        position: relative;
-    }
-
-    .enhanced-media-module ul li strong {
-        color: var(--kodiak-brown, #4A3828);
-        font-weight: bold;
-    }
-
-    /* Better spacing between mixed content elements */
-    .enhanced-media-module p + ul {
-        margin-top: 0.5rem;
-    }
-
-    .enhanced-media-module ul + p {
-        margin-top: 1rem;
-    }
-
-    /* Responsive adjustments */
-    @media (max-width: 768px) {
-        .enhanced-media-module {
-            margin: 1rem 0;
-        }
-
-        .enhanced-media-module h3 {
-            font-size: 1.1rem;
-        }
-
-        .enhanced-media-module p,
-        .enhanced-media-module ul,
-        .enhanced-media-module ol {
-            font-size: 0.95rem;
-        }
-    }
-
-    @media (max-width: 768px) {
-        .container {
-            padding: 1rem;
-        }
-        
-        .tabs {
-            flex-direction: column;
-        }
-        
-        .header {
-            flex-direction: column;
-            text-align: center;
-            gap: 2rem;
-        }
-
-        .logo-container {
-            margin-left: 0;
-            width: 100px;
-            height: 100px;
-        }
-        
-        .header h1 {
-            font-size: 2rem;
-        }
-    }
-            padding: 1rem;
-        }
-        
-        .tabs {
-            flex-direction: column;
-        }
-        
-        .header {
-            flex-direction: column;
-            text-align: center;
-            gap: 2rem;
-        }
-
-        .logo-container {
-            margin-left: 0;
-            width: 100px;
-            height: 100px;
-        }
-        
-        .header h1 {
-            font-size: 2rem;
-        }
-    }
+}
