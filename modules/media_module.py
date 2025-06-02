@@ -49,17 +49,32 @@ class MediaModule(Module):
         media_refs = []
 
         source = self.content_data.get('source', '')
-        if source and source.strip():
-            media_refs.append(source)
+        print(f"MediaModule source from content_data: '{source}' (type: {type(source)})")
 
+        if source and source.strip():
+            cleaned_source = source.strip()
+            print(f"Adding MediaModule source: '{cleaned_source}'")
+            media_refs.append(cleaned_source)
+
+        print(f"MediaModule returning {len(media_refs)} references: {media_refs}")
         return media_refs
 
     def update_media_references(self, path_mapping: Dict[str, str]):
-        """Update all media paths using the provided mapping"""
         source = self.content_data.get('source', '')
+        print(f"🔧 Original source: '{source}'")
 
-        if source and source in path_mapping:
-            self.content_data['source'] = path_mapping[source]
+        if source and source.strip():
+            normalized_source = self._normalize_media_path(source)
+            print(f"🔧 Normalized source: '{normalized_source}'")
+            print(f"🔧 Available mapping keys: {list(path_mapping.keys())}")
+            print(f"🔧 Is normalized in mapping: {normalized_source in path_mapping}")
+
+            if normalized_source in path_mapping:
+                old_source = self.content_data['source']
+                self.content_data['source'] = path_mapping[normalized_source]
+                print(f"🔧 Updated source from '{old_source}' to '{self.content_data['source'][:50]}...'")
+            else:
+                print(f"🔧 Could not find mapping for normalized path")
 
     def _format_text_content(self, text: str) -> str:
         """Format text content with bullets, numbers, and bold"""
