@@ -330,13 +330,17 @@ class IssueCardModule(Module):
         """Update all media paths using the provided mapping"""
         # Update issue media source
         issue_source = self.content_data.get('issue_media_source', '')
-        if issue_source and issue_source in path_mapping:
-            self.content_data['issue_media_source'] = path_mapping[issue_source]
+        if issue_source and issue_source.strip():
+            normalized_issue_source = self._normalize_media_path(issue_source)
+            if normalized_issue_source in path_mapping:
+                self.content_data['issue_media_source'] = path_mapping[normalized_issue_source]
 
         # Update solution single media source
         solution_source = self.content_data.get('solution_single_media_source', '')
-        if solution_source and solution_source in path_mapping:
-            self.content_data['solution_single_media_source'] = path_mapping[solution_source]
+        if solution_source and solution_source.strip():
+            normalized_solution_source = self._normalize_media_path(solution_source)
+            if normalized_solution_source in path_mapping:
+                self.content_data['solution_single_media_source'] = path_mapping[normalized_solution_source]
 
         # Update solution media items
         solution_items = self.content_data.get('solution_media_items', [])
@@ -344,8 +348,10 @@ class IssueCardModule(Module):
             for item in solution_items:
                 if isinstance(item, dict):
                     item_source = item.get('source', '')
-                    if item_source and item_source in path_mapping:
-                        item['source'] = path_mapping[item_source]
+                    if item_source and item_source.strip():
+                        normalized_item_source = self._normalize_media_path(item_source)
+                        if normalized_item_source in path_mapping:
+                            item['source'] = path_mapping[normalized_item_source]
 
     def update_content(self, key: str, value: Any):
         """Update specific content field with path normalization"""
