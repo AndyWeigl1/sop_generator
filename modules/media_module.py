@@ -1,4 +1,4 @@
-# modules/media_module.py
+# modules/media_module.py - FIXED with base64 validation
 from modules.base_module import Module
 from typing import Dict, Any, List
 import os
@@ -44,6 +44,35 @@ class MediaModule(Module):
         # If it's already a relative path, use as-is
         return cleaned_path
 
+    def _is_base64_data(self, data_string: str) -> bool:
+        """
+        Check if a string appears to be base64 data rather than a file path
+
+        Args:
+            data_string: String to check
+
+        Returns:
+            True if it appears to be base64 data
+        """
+        if not data_string or not isinstance(data_string, str):
+            return False
+
+        # Check for data URL format
+        if data_string.startswith('data:'):
+            return True
+
+        # Check for short strings with base64 characters that look suspicious
+        if len(data_string) < 20 and any(c in data_string for c in '=+/'):
+            return True
+
+        # Check if it looks like pure base64 (no file path characteristics)
+        if (len(data_string) > 10 and
+                not any(char in data_string for char in r'\/.:') and  # No path separators or extensions
+                data_string.replace('=', '').replace('+', '').replace('/', '').isalnum()):
+            return True
+
+        return False
+
     def get_media_references(self) -> List[str]:
         """Return all media file paths used by this module"""
         media_refs = []
@@ -53,6 +82,12 @@ class MediaModule(Module):
 
         if source and source.strip():
             cleaned_source = source.strip()
+
+            # Check if this is base64 data instead of a file path
+            if self._is_base64_data(cleaned_source):
+                print(f"⚠️ MediaModule: Source appears to be base64 data, not a file path: '{cleaned_source[:20]}...'")
+                return []  # Don't treat base64 data as a file reference
+
             print(f"Adding MediaModule source: '{cleaned_source}'")
             media_refs.append(cleaned_source)
 
@@ -64,6 +99,11 @@ class MediaModule(Module):
         print(f"🔧 Original source: '{source}'")
 
         if source and source.strip():
+            # Skip if source is already base64 data
+            if self._is_base64_data(source):
+                print(f"🔧 Source is already base64 data, skipping update")
+                return
+
             normalized_source = self._normalize_media_path(source)
             print(f"🔧 Normalized source: '{normalized_source}'")
             print(f"🔧 Available mapping keys: {list(path_mapping.keys())}")
@@ -240,9 +280,18 @@ class MediaModule(Module):
         }
 
     def update_content(self, key: str, value: Any):
-        """Update specific content field with path normalization"""
+        """Update specific content field with path normalization and base64 validation"""
         if key == 'source':
-            # Normalize file paths when they're updated
-            self.content_data[key] = self._normalize_file_path(value)
+            # Validate that we're not storing base64 data as a file path
+            if value and self._is_base64_data(str(value)):
+                print(f"⚠️ Warning: Attempting to set source to base64 data: '{str(value)[:20]}...'")
+                print(f"⚠️ This may indicate a bug in the media handling code.")
+                # For now, allow it but log it for debugging
+
+            # Normalize file paths when they're updated (but not base64 data)
+            if value and not self._is_base64_data(str(value)):
+                self.content_data[key] = self._normalize_file_path(value)
+            else:
+                self.content_data[key] = value
         else:
             self.content_data[key] = value
