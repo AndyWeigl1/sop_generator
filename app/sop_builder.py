@@ -85,7 +85,7 @@ class SOPBuilderApp:
         self.main_window.preview_toggle.configure(command=self.toggle_preview)
 
     def _setup_base_template(self):
-        """Create the base SOP template with Header, Tab, and Section Title"""
+        """Create the base SOP template with Header, Tab Section (with content), and Footer"""
         try:
             # 1. Add Header Module
             header_module = ModuleFactory.create_module('header')
@@ -93,6 +93,7 @@ class SOPBuilderApp:
             header_module.update_content('title', 'Standard Operating Procedure')
             header_module.update_content('subtitle', 'Process Name')
             header_module.update_content('date', 'Last Updated: MM/DD/YYYY')
+            header_module.update_content('logo_path', 'assets/kodiak.png')
 
             self.active_modules.append(header_module)
             self.canvas_panel.add_module_widget(header_module)
@@ -100,23 +101,46 @@ class SOPBuilderApp:
             # 2. Add Tab Module
             tab_module = ModuleFactory.create_module('tabs')
             tab_module.position = 1
-            # Set up default tabs
+            # Set up default tabs (Instructions and Common Issues)
             tab_module.update_content('tabs', ['Instructions', 'Common Issues'])
             tab_module.update_content('active_tab', 0)
 
-            self.active_modules.append(tab_module)
-            self.canvas_panel.add_module_widget(tab_module)
+            # 3. Create modules for the Instructions tab
+            # 3a. Create Disclaimer Box for Instructions tab
+            disclaimer_module = ModuleFactory.create_module('disclaimer')
+            disclaimer_module.position = 0  # Position within the Instructions tab
+            disclaimer_module.update_content('label', 'IMPORTANT!')
+            disclaimer_module.update_content('title', 'Before You Begin:')
+            disclaimer_module.update_content('content', 'Important information or warnings go here...')
+            disclaimer_module.update_content('type', 'warning')
+            disclaimer_module.update_content('icon', True)
 
-            # 3. Add Section Title Module (this would typically go inside a tab)
+            # 3b. Create Section Title for Instructions tab
             section_title_module = ModuleFactory.create_module('section_title')
-            section_title_module.position = 2
+            section_title_module.position = 1  # Position within the Instructions tab
             section_title_module.update_content('title', 'Getting Started')
             section_title_module.update_content('subtitle', 'Follow these steps to complete the process')
             section_title_module.update_content('style', 'default')
             section_title_module.update_content('size', 'large')
 
-            self.active_modules.append(section_title_module)
-            self.canvas_panel.add_module_widget(section_title_module)
+            # Add modules to the Instructions tab
+            tab_module.add_module_to_tab('Instructions', disclaimer_module)
+            tab_module.add_module_to_tab('Instructions', section_title_module)
+            # Common Issues tab remains empty as requested
+
+            self.active_modules.append(tab_module)
+            self.canvas_panel.add_module_widget(tab_module, with_nested=True)
+
+            # 4. Add Footer Module
+            footer_module = ModuleFactory.create_module('footer')
+            footer_module.position = 2
+            footer_module.update_content('organization', 'Your Organization')
+            footer_module.update_content('department', 'Department Name')
+            footer_module.update_content('revision_date', 'MM.DD.YYYY')
+            footer_module.update_content('show_copyright', True)
+
+            self.active_modules.append(footer_module)
+            self.canvas_panel.add_module_widget(footer_module)
 
             # Update positions for all modules
             self._update_module_positions()
