@@ -985,9 +985,6 @@ class PropertiesPanel:
         elif module.module_type == 'media':
             source = module.content_data.get('source', 'No source')
             return f"Source: {os.path.basename(source) if source else 'No source'}"
-        elif module.module_type == 'step_card':
-            title = module.content_data.get('title', 'Untitled')
-            return f"Title: {title}"
         elif module.module_type == 'table':
             title = module.content_data.get('title', 'Untitled')
             return f"Title: {title}"
