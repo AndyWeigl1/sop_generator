@@ -72,7 +72,7 @@ class IssueCardModule(Module):
 
         for line in lines:
             stripped_line = line.strip()
-            
+
             if not stripped_line:
                 # Empty line - close any open lists
                 if in_list:
@@ -120,22 +120,22 @@ class IssueCardModule(Module):
 
         return '\n'.join(formatted_lines)
 
-    def _render_media_container(self, media_type: str, source: str, caption: str, 
+    def _render_media_container(self, media_type: str, source: str, caption: str,
                                 alt_text: str, header: str, max_width: str = '545px') -> str:
         """Render a media container with proper styling"""
         if not source:
             return ''
 
         source = self._normalize_file_path(source)
-        
+
         # Determine if clickable based on media type
         clickable = (media_type == 'image')
-        
+
         media_html = ''
         if media_type == 'image':
             click_handler = 'onclick="openImageModal(this)"' if clickable else ''
             title_attr = 'title="Click to view full size"' if clickable else ''
-            
+
             media_html = f'''
             <picture>
                 <img 
@@ -193,14 +193,14 @@ class IssueCardModule(Module):
                 return ''
 
             grid_html = '<div class="media-grid side-by-side">'
-            
+
             for item in media_items:
                 source = item.get('source', '')
                 if source:
                     source = self._normalize_file_path(source)
                     caption = item.get('caption', '')
                     alt_text = item.get('alt_text', '')
-                    
+
                     grid_html += f'''
                     <div class="media-container" style="--media-max-width: 100%">
                         <div class="media-header">Solution Step</div>
@@ -218,7 +218,7 @@ class IssueCardModule(Module):
                             <span style="color: var(--kodiak-red); font-size: 0.9em;">(Click image to view full size)</span>
                         </div>
                     </div>'''
-            
+
             grid_html += '</div>'
             return grid_html
 
@@ -300,6 +300,52 @@ class IssueCardModule(Module):
             'solution_media_items': 'media_list_editor',
             'show_icon': 'checkbox'
         }
+
+    def get_media_references(self) -> List[str]:
+        """Return all media file paths used by this module"""
+        media_refs = []
+
+        # Issue media source
+        issue_source = self.content_data.get('issue_media_source', '')
+        if issue_source and issue_source.strip():
+            media_refs.append(issue_source)
+
+        # Solution single media source
+        solution_source = self.content_data.get('solution_single_media_source', '')
+        if solution_source and solution_source.strip():
+            media_refs.append(solution_source)
+
+        # Solution media items (for grid layout)
+        solution_items = self.content_data.get('solution_media_items', [])
+        if isinstance(solution_items, list):
+            for item in solution_items:
+                if isinstance(item, dict):
+                    item_source = item.get('source', '')
+                    if item_source and item_source.strip():
+                        media_refs.append(item_source)
+
+        return media_refs
+
+    def update_media_references(self, path_mapping: Dict[str, str]):
+        """Update all media paths using the provided mapping"""
+        # Update issue media source
+        issue_source = self.content_data.get('issue_media_source', '')
+        if issue_source and issue_source in path_mapping:
+            self.content_data['issue_media_source'] = path_mapping[issue_source]
+
+        # Update solution single media source
+        solution_source = self.content_data.get('solution_single_media_source', '')
+        if solution_source and solution_source in path_mapping:
+            self.content_data['solution_single_media_source'] = path_mapping[solution_source]
+
+        # Update solution media items
+        solution_items = self.content_data.get('solution_media_items', [])
+        if isinstance(solution_items, list):
+            for item in solution_items:
+                if isinstance(item, dict):
+                    item_source = item.get('source', '')
+                    if item_source and item_source in path_mapping:
+                        item['source'] = path_mapping[item_source]
 
     def update_content(self, key: str, value: Any):
         """Update specific content field with path normalization"""
