@@ -136,12 +136,7 @@ class MediaDiscoveryService:
     def _normalize_path(self, file_path: str) -> str:
         """
         Normalize file path for consistent handling
-
-        Args:
-            file_path: Raw file path from module
-
-        Returns:
-            Normalized file path
+        MUST match the normalization used in modules
         """
         if not file_path:
             return ''
@@ -152,11 +147,15 @@ class MediaDiscoveryService:
         # Convert to Path object for normalization
         path_obj = Path(cleaned_path)
 
-        # Return absolute path if it exists, otherwise return as-is
+        # Return absolute path with consistent separator
         if path_obj.exists():
-            return str(path_obj.resolve())
+            # Convert to absolute path and ensure consistent separators
+            abs_path = str(path_obj.resolve())
+            # Always use forward slashes for consistency
+            return abs_path.replace('\\', '/')
         else:
-            return cleaned_path
+            # For non-existent files, still normalize the format
+            return str(Path(cleaned_path)).replace('\\', '/')
 
     def get_media_info(self, file_path: str) -> MediaInfo:
         """
