@@ -770,14 +770,6 @@ class PropertiesPanel:
             entry_widget.insert(0, filename)
             self._on_property_change(field_name, filename)
 
-            # Show helpful message about file handling
-            messagebox.showinfo(
-                "File Selected",
-                f"File selected: {os.path.basename(filename)}\n\n"
-                "💡 Tip: When you export to HTML, your media files will be "
-                "automatically copied to an 'Assets' folder next to your HTML file."
-            )
-
     def show_tab_properties(self, tab_module: 'TabModule', tab_name: str):
         """Display properties for a selected tab within a TabModule"""
         self.clear()
