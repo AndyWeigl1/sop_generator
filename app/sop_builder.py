@@ -442,7 +442,7 @@ class SOPBuilderApp:
             self.main_window.set_status("Failed to save project", "red")
 
     def export_to_html(self):
-        """Export current SOP to HTML file with enhanced options including media embedding"""
+        """Export current SOP to HTML file with enhanced media embedding"""
         if not self.active_modules:
             messagebox.showwarning("No Content", "Please add some modules before exporting.")
             return
@@ -456,7 +456,7 @@ class SOPBuilderApp:
 
         filename = export_dialog.filename
         embed_css = export_dialog.embed_css
-        embed_media = export_dialog.embed_media  # NEW
+        embed_media = export_dialog.embed_media
         selected_theme = export_dialog.selected_theme
 
         if filename:
@@ -468,44 +468,169 @@ class SOPBuilderApp:
                 output_path = Path(filename)
                 output_dir = output_path.parent
 
-                # Show progress for media embedding if enabled
+                # Create progress dialog for media embedding if enabled
+                progress_dialog = None
                 progress_callback = None
-                if embed_media:
-                    progress_callback = self._create_export_progress_callback()
 
-                # Generate HTML with new media embedding option
+                if embed_media:
+                    # Create a simple progress tracking function
+                    def create_progress_callback():
+                        progress_info = {'current': 0, 'total': 0, 'dialog': None}
+
+                        def progress_callback(current, total, current_file):
+                            # Update progress info
+                            progress_info['current'] = current
+                            progress_info['total'] = total
+
+                            # Create progress dialog on first call
+                            if not progress_info['dialog']:
+                                progress_info['dialog'] = self._create_progress_dialog(total)
+
+                            # Update the dialog
+                            try:
+                                dialog = progress_info['dialog']
+                                if dialog and dialog.winfo_exists():
+                                    # Update progress bar
+                                    progress_percent = (current / total) * 100 if total > 0 else 0
+                                    dialog.progress_bar.set(progress_percent / 100)
+
+                                    # Update status text
+                                    file_name = Path(current_file).name
+                                    status_text = f"Embedding {current}/{total}: {file_name}"
+                                    dialog.status_label.configure(text=status_text)
+
+                                    # Update the dialog
+                                    dialog.update()
+
+                                    # Close dialog when complete
+                                    if current >= total:
+                                        dialog.after(1000, dialog.destroy)  # Close after 1 second
+                            except Exception as e:
+                                print(f"Progress dialog error: {e}")
+
+                        return progress_callback
+
+                    progress_callback = create_progress_callback()
+
+                # Show initial status
+                if embed_media:
+                    self.main_window.set_status("Preparing media embedding...", "blue")
+                else:
+                    self.main_window.set_status("Generating HTML...", "blue")
+
+                # Generate HTML with enhanced options
                 html_content = self.html_generator.generate_html(
                     self.active_modules,
-                    output_dir=output_dir,
+                    title="Standard Operating Procedure",
+                    output_dir=output_dir if not embed_media else None,  # No output_dir if embedding everything
                     embed_theme=embed_css,
-                    embed_media=embed_media,  # NEW parameter
-                    progress_callback=progress_callback  # NEW parameter
+                    embed_media=embed_media,
+                    progress_callback=progress_callback
                 )
 
                 # Save to file
+                self.main_window.set_status("Saving HTML file...", "blue")
                 with open(filename, 'w', encoding='utf-8') as f:
                     f.write(html_content)
 
-                # Success message with embedding info
+                # Generate success message with embedding info
                 success_msg = f"SOP exported successfully to:\n{filename}"
-                if embed_media and export_dialog.size_stats['total_files'] > 0:
-                    success_msg += f"\n\n✅ {export_dialog.size_stats['valid_files']} media files embedded"
-                    if embed_css:
-                        success_msg += "\n✅ Completely self-contained HTML file created"
 
-                messagebox.showinfo("Success", success_msg)
+                if embed_media and hasattr(export_dialog, 'size_stats'):
+                    stats = export_dialog.size_stats
+                    if stats['total_files'] > 0:
+                        success_msg += f"\n\n✅ {stats['valid_files']} media files embedded"
+                        if embed_css:
+                            success_msg += "\n✅ Completely self-contained HTML file created"
+
+                        # Add size information
+                        if stats['total_embedded_size_mb'] > 0:
+                            success_msg += f"\n📊 Final file size: ~{stats['total_embedded_size_mb']:.1f}MB"
+
+                messagebox.showinfo("Export Successful", success_msg)
                 self.main_window.set_status(f"Exported to {Path(filename).name}", "green")
 
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to export HTML: {str(e)}")
+                error_msg = f"Failed to export HTML: {str(e)}"
+                messagebox.showerror("Export Error", error_msg)
                 self.main_window.set_status("Export failed", "red")
+                print(f"Export error details: {e}")
+
+                # Print additional error info for debugging
+                import traceback
+                traceback.print_exc()
+
+    def _create_progress_dialog(self, total_files: int):
+        """Create a progress dialog for media embedding"""
+        try:
+            # Create progress dialog
+            progress_dialog = ctk.CTkToplevel(self.root)
+            progress_dialog.title("Embedding Media Files")
+            progress_dialog.geometry("450x150")
+            progress_dialog.transient(self.root)
+            progress_dialog.grab_set()
+
+            # Center the dialog
+            progress_dialog.update_idletasks()
+            x = (progress_dialog.winfo_screenwidth() // 2) - (450 // 2)
+            y = (progress_dialog.winfo_screenheight() // 2) - (150 // 2)
+            progress_dialog.geometry(f"+{x}+{y}")
+
+            # Main frame
+            main_frame = ctk.CTkFrame(progress_dialog, fg_color="transparent")
+            main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+            # Title
+            title_label = ctk.CTkLabel(
+                main_frame,
+                text="🔄 Embedding Media Files",
+                font=("Arial", 16, "bold")
+            )
+            title_label.pack(pady=(0, 15))
+
+            # Progress bar
+            progress_bar = ctk.CTkProgressBar(main_frame, width=400, height=20)
+            progress_bar.pack(pady=(0, 10))
+            progress_bar.set(0)
+
+            # Store reference to progress bar
+            progress_dialog.progress_bar = progress_bar
+
+            # Status label
+            status_label = ctk.CTkLabel(
+                main_frame,
+                text=f"Starting embedding process for {total_files} files...",
+                font=("Arial", 12)
+            )
+            status_label.pack(pady=(0, 10))
+
+            # Store reference to status label
+            progress_dialog.status_label = status_label
+
+            # Info label
+            info_label = ctk.CTkLabel(
+                main_frame,
+                text="💡 Large files may take longer to process",
+                font=("Arial", 10),
+                text_color="gray"
+            )
+            info_label.pack()
+
+            # Make sure dialog is visible
+            progress_dialog.update()
+
+            return progress_dialog
+
+        except Exception as e:
+            print(f"Error creating progress dialog: {e}")
+            return None
 
     def _create_export_progress_callback(self):
-        """Create a progress callback for media embedding (placeholder for Phase 4)"""
+        """Create a progress callback for media embedding (enhanced version)"""
 
+        # This is the existing method that can now work with the new progress dialog
         def progress_callback(current, total, current_file):
-            # For Phase 1, just print progress
-            # In Phase 4, this will show a progress dialog
+            # For now, just print progress - the new dialog method above provides better UI
             print(f"Embedding media: {current}/{total} - {Path(current_file).name}")
 
         return progress_callback
