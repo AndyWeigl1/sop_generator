@@ -139,7 +139,7 @@ class MediaGridModule(Module):
         for item in self.content_data.get('items', []):
             # Normalize the file path
             source = self._normalize_file_path(item.get('source', ''))
-            
+
             if item['type'] == 'image':
                 click_handler = 'onclick="openImageModal(this)"' if self.content_data.get('clickable') else ''
                 title_attr = 'title="Click to view full size"' if self.content_data.get('clickable') else ''
@@ -163,7 +163,7 @@ class MediaGridModule(Module):
                 click_instruction = ''
                 if self.content_data.get('clickable') and item['type'] == 'image':
                     click_instruction = '<br><span style="color: var(--kodiak-red, #e74c3c); font-size: 0.9em;">(Click image to view full size)</span>'
-                
+
                 caption_html = f'<div class="media-caption">{item["caption"]}{click_instruction}</div>'
 
             items_html += f'''
@@ -216,6 +216,30 @@ class MediaGridModule(Module):
             'content_after': 'textarea:formatted',  # Enable formatting toolbar
             'max_width': 'text'
         }
+
+    def get_media_references(self) -> List[str]:
+        """Return all media file paths used by this module"""
+        media_refs = []
+
+        items = self.content_data.get('items', [])
+        if isinstance(items, list):
+            for item in items:
+                if isinstance(item, dict):
+                    source = item.get('source', '')
+                    if source and source.strip():
+                        media_refs.append(source)
+
+        return media_refs
+
+    def update_media_references(self, path_mapping: Dict[str, str]):
+        """Update all media paths using the provided mapping"""
+        items = self.content_data.get('items', [])
+        if isinstance(items, list):
+            for item in items:
+                if isinstance(item, dict):
+                    source = item.get('source', '')
+                    if source and source in path_mapping:
+                        item['source'] = path_mapping[source]
 
     def update_content(self, key: str, value: Any):
         """Update specific content field with path normalization for media items"""
