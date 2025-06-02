@@ -93,10 +93,12 @@ class HTMLGenerator:
         if copied_files:
             print(f"Copied {len(copied_files)} media files to Assets folder: {copied_files}")
 
+    # Update the main generate_html method signature
     def generate_html(self, modules: List[Module], title: str = "Standard Operating Procedure",
                       output_dir: Optional[Path] = None, embed_theme: bool = False,
-                      embed_media: bool = False,  # ENHANCED
-                      progress_callback: Optional[Callable[[int, int, str], None]] = None) -> str:  # NEW
+                      embed_media: bool = False,
+                      embed_css_assets: bool = False,  # NEW PARAMETER
+                      progress_callback: Optional[Callable[[int, int, str], None]] = None) -> str:
         """
         Generate complete HTML from modules with enhanced embedding options
 
@@ -106,6 +108,7 @@ class HTMLGenerator:
             output_dir: Output directory for assets (if not embedding)
             embed_theme: Whether to embed CSS in HTML
             embed_media: Whether to embed media as base64 data URLs
+            embed_css_assets: Whether to embed CSS assets (fonts, images) as base64  # NEW
             progress_callback: Optional callback for progress updates (current, total, filename)
 
         Returns:
@@ -126,7 +129,9 @@ class HTMLGenerator:
                 self._copy_media_files(working_modules, output_dir)
 
             # Step 3: Generate HTML content from processed modules
-            html_content = self._generate_html_content(working_modules, title, output_dir, embed_theme)
+            html_content = self._generate_html_content(
+                working_modules, title, output_dir, embed_theme, embed_css_assets  # PASS THE NEW PARAMETER
+            )
 
             print("✅ HTML generation completed successfully")
             return html_content
@@ -274,8 +279,10 @@ class HTMLGenerator:
         except Exception as e:
             return False, f"Error validating embedding feasibility: {str(e)}"
 
+    # Update the _generate_html_content method
     def _generate_html_content(self, modules: List[Module], title: str,
-                               output_dir: Optional[Path], embed_theme: bool) -> str:
+                               output_dir: Optional[Path], embed_theme: bool,
+                               embed_css_assets: bool = False) -> str:  # ADD THE NEW PARAMETER
         """
         Generate the HTML content from processed modules
 
@@ -284,6 +291,7 @@ class HTMLGenerator:
             title: HTML document title
             output_dir: Output directory (may be None if embedding everything)
             embed_theme: Whether to embed CSS
+            embed_css_assets: Whether to embed CSS assets as base64
 
         Returns:
             Complete HTML string
@@ -358,8 +366,8 @@ class HTMLGenerator:
 
         # Handle theme CSS
         if embed_theme:
-            # Read and embed the CSS file content
-            theme_css_content = self._load_theme_css()
+            # Read and embed the CSS file content with assets
+            theme_css_content = self._load_theme_css(embed_assets=embed_css_assets)  # PASS THE PARAMETER
             theme_css_ref = ""
             custom_styles = f"<style>\n{theme_css_content}\n</style>"
         else:
@@ -386,6 +394,26 @@ class HTMLGenerator:
         )
 
         return html
+
+    def _load_theme_css(self, embed_assets: bool = False) -> str:
+        """Load CSS content from theme file and optionally embed assets"""
+        theme_path = self.themes_dir / f"{self.theme_name}.css"
+
+        if not theme_path.exists():
+            return self._generate_default_styles()
+
+        with open(theme_path, 'r', encoding='utf-8') as f:
+            css_content = f.read()
+
+        # If embedding assets, process CSS for asset references
+        if embed_assets:
+            from utils.css_asset_embedder import CSSAssetEmbedder
+            css_embedder = CSSAssetEmbedder()
+
+            print(f"🎨 Processing CSS assets for {self.theme_name} theme...")
+            css_content = css_embedder.embed_css_assets(css_content, theme_path)
+
+        return css_content
 
     def _render_tab_module_with_cards(self, tab_module: 'TabModule') -> str:
         """Generate HTML for TabModule with proper card structure"""
