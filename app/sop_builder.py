@@ -137,6 +137,7 @@ class SOPBuilderApp:
             footer_module.update_content('organization', 'Your Organization')
             footer_module.update_content('department', 'Department Name')
             footer_module.update_content('revision_date', 'MM.DD.YYYY')
+            footer_module.update_content('background_image', 'assets/mountains.png')  # Add this line
             footer_module.update_content('show_copyright', True)
 
             self.active_modules.append(footer_module)
