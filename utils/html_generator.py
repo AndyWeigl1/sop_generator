@@ -1,20 +1,36 @@
 # utils/html_generator.py
-from typing import List, Dict, Optional, Set
+from typing import List, Dict, Optional, Set, Tuple, Any
 from modules.base_module import Module
 from modules.complex_module import TabModule
-import base64
 from pathlib import Path
 import shutil
 import os
+import base64
+import mimetypes
+import copy
+import re
 
 
 class HTMLGenerator:
     """Generate HTML from arranged modules with theme support"""
 
     def __init__(self):
-        self.theme_name = "kodiak"  # Default theme
+        self.theme_name = "kodiak"
         self.themes_dir = Path("assets/themes")
         self.base_template = self._load_base_template()
+
+        # Media field mapping for different module types
+        self.MEDIA_FIELD_MAPPING = {
+            'media': ['source'],
+            'header': ['logo_path'],
+            'footer': ['background_image'],
+            'media_grid': ['items'],  # Special handling for list
+            'issue_card': [
+                'issue_media_source',
+                'solution_single_media_source',
+                'solution_media_items'
+            ],
+        }
 
     def _load_base_template(self) -> str:
         """Load the base HTML template with external CSS support"""
@@ -78,10 +94,17 @@ class HTMLGenerator:
             print(f"Copied {len(copied_files)} media files to Assets folder: {copied_files}")
 
     def generate_html(self, modules: List[Module], title: str = "Standard Operating Procedure",
-                      output_dir: Optional[Path] = None, embed_theme: bool = False) -> str:
+                      output_dir: Optional[Path] = None, embed_theme: bool = False,
+                      embed_media: bool = False,  # NEW
+                      progress_callback=None) -> str:  # NEW
         """
-        Generate complete HTML from modules with proper hierarchical rendering and card structure
+        Generate complete HTML from modules with enhanced embedding options
         """
+        # For Phase 1, just pass through - media embedding will be implemented in Phase 3
+        if embed_media:
+            print(f"Media embedding requested for {len(modules)} modules")
+            # TODO: Implement in Phase 3
+
         # Copy media files before generating HTML
         if output_dir:
             self._copy_media_files(modules, output_dir)
