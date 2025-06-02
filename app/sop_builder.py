@@ -11,6 +11,8 @@ from pathlib import Path
 from tkinter import filedialog, messagebox
 from utils.html_generator import HTMLGenerator
 from utils.project_manager import ProjectManager
+from utils.media_discovery import MediaDiscoveryService
+from utils.base64_embedder import Base64EmbedderService
 
 
 class SOPBuilderApp:
@@ -440,13 +442,13 @@ class SOPBuilderApp:
             self.main_window.set_status("Failed to save project", "red")
 
     def export_to_html(self):
-        """Export current SOP to HTML file with theme support"""
+        """Export current SOP to HTML file with enhanced options including media embedding"""
         if not self.active_modules:
             messagebox.showwarning("No Content", "Please add some modules before exporting.")
             return
 
-        # Create export dialog with options
-        export_dialog = ExportDialog(self.root, self.html_generator.get_available_themes())
+        # Create enhanced export dialog with modules for media discovery
+        export_dialog = ExportDialog(self.root, self.html_generator.get_available_themes(), self.active_modules)
         self.root.wait_window(export_dialog.dialog)
 
         if not export_dialog.result:
@@ -454,6 +456,7 @@ class SOPBuilderApp:
 
         filename = export_dialog.filename
         embed_css = export_dialog.embed_css
+        embed_media = export_dialog.embed_media  # NEW
         selected_theme = export_dialog.selected_theme
 
         if filename:
@@ -465,23 +468,47 @@ class SOPBuilderApp:
                 output_path = Path(filename)
                 output_dir = output_path.parent
 
-                # Generate HTML
+                # Show progress for media embedding if enabled
+                progress_callback = None
+                if embed_media:
+                    progress_callback = self._create_export_progress_callback()
+
+                # Generate HTML with new media embedding option
                 html_content = self.html_generator.generate_html(
                     self.active_modules,
                     output_dir=output_dir,
-                    embed_theme=embed_css
+                    embed_theme=embed_css,
+                    embed_media=embed_media,  # NEW parameter
+                    progress_callback=progress_callback  # NEW parameter
                 )
 
                 # Save to file
                 with open(filename, 'w', encoding='utf-8') as f:
                     f.write(html_content)
 
-                messagebox.showinfo("Success", f"SOP exported successfully to:\n{filename}")
+                # Success message with embedding info
+                success_msg = f"SOP exported successfully to:\n{filename}"
+                if embed_media and export_dialog.size_stats['total_files'] > 0:
+                    success_msg += f"\n\n✅ {export_dialog.size_stats['valid_files']} media files embedded"
+                    if embed_css:
+                        success_msg += "\n✅ Completely self-contained HTML file created"
+
+                messagebox.showinfo("Success", success_msg)
                 self.main_window.set_status(f"Exported to {Path(filename).name}", "green")
 
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to export HTML: {str(e)}")
                 self.main_window.set_status("Export failed", "red")
+
+    def _create_export_progress_callback(self):
+        """Create a progress callback for media embedding (placeholder for Phase 4)"""
+
+        def progress_callback(current, total, current_file):
+            # For Phase 1, just print progress
+            # In Phase 4, this will show a progress dialog
+            print(f"Embedding media: {current}/{total} - {Path(current_file).name}")
+
+        return progress_callback
 
     def toggle_preview(self):
         """Toggle between edit and preview modes"""
@@ -540,100 +567,400 @@ class SOPBuilderApp:
 
 
 class ExportDialog:
-    """Dialog for export options"""
+    """Enhanced dialog for export options including media embedding"""
 
-    def __init__(self, parent, available_themes):
+    def __init__(self, parent, available_themes: List[str], modules: List):
         self.result = False
         self.filename = None
         self.embed_css = False
-        self.embed_media_base64 = False  # New attribute
+        self.embed_media = False  # NEW
         self.selected_theme = "kodiak"
+        self.modules = modules  # Store modules for media discovery
+
+        # Import the new services
+        from utils.media_discovery import MediaDiscoveryService
+        from utils.base64_embedder import Base64EmbedderService
+
+        self.media_discovery = MediaDiscoveryService()
+        self.base64_embedder = Base64EmbedderService()
+
+        # Discover media files
+        self.discovered_media = self.media_discovery.discover_all_media(modules)
+        self.size_stats = self.media_discovery.estimate_embedded_size()
 
         # Create dialog window
         self.dialog = ctk.CTkToplevel(parent)
         self.dialog.title("Export SOP")
-        self.dialog.geometry("500x350")  # Increased height for new option
+        self.dialog.geometry("600x500")  # Made taller for new options
         self.dialog.transient(parent)
         self.dialog.grab_set()
 
         # Center the dialog
         self.dialog.update_idletasks()
-        x = (self.dialog.winfo_screenwidth() // 2) - (500 // 2)
-        y = (self.dialog.winfo_screenheight() // 2) - (350 // 2)
+        x = (self.dialog.winfo_screenwidth() // 2) - (600 // 2)
+        y = (self.dialog.winfo_screenheight() // 2) - (500 // 2)
         self.dialog.geometry(f"+{x}+{y}")
 
         self._create_widgets(available_themes)
 
-    def _create_widgets(self, available_themes):
-        """Create dialog widgets"""
-        # Main frame
-        main_frame = ctk.CTkFrame(self.dialog)
+    def _create_widgets(self, available_themes: List[str]):
+        """Create dialog widgets with enhanced options"""
+        # Main frame with scrollable content
+        main_frame = ctk.CTkScrollableFrame(self.dialog)
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
-        # Theme selection
-        theme_label = ctk.CTkLabel(main_frame, text="Select Theme:", font=("Arial", 14))
-        theme_label.pack(pady=(0, 5))
+        # Title
+        title_label = ctk.CTkLabel(
+            main_frame,
+            text="📄 Export Standard Operating Procedure",
+            font=("Arial", 18, "bold")
+        )
+        title_label.pack(pady=(0, 20))
+
+        # Theme selection section
+        self._create_theme_section(main_frame, available_themes)
+
+        # CSS options section
+        self._create_css_section(main_frame)
+
+        # NEW: Media embedding section
+        self._create_media_section(main_frame)
+
+        # Export summary section
+        self._create_summary_section(main_frame)
+
+        # Buttons
+        self._create_buttons(main_frame)
+
+    def _create_theme_section(self, parent, available_themes: List[str]):
+        """Create theme selection section"""
+        theme_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        theme_frame.pack(fill="x", pady=(0, 15))
+
+        theme_label = ctk.CTkLabel(
+            theme_frame,
+            text="🎨 Select Theme:",
+            font=("Arial", 14, "bold")
+        )
+        theme_label.pack(anchor="w", pady=(0, 5))
 
         self.theme_var = ctk.StringVar(value="kodiak")
         theme_menu = ctk.CTkComboBox(
-            main_frame,
+            theme_frame,
             values=available_themes or ["kodiak"],
             variable=self.theme_var,
-            width=200
+            width=200,
+            command=self._on_theme_change
         )
-        theme_menu.pack(pady=(0, 20))
+        theme_menu.pack(anchor="w")
 
-        # CSS embedding option
-        self.embed_var = ctk.BooleanVar(value=False)
-        embed_check = ctk.CTkCheckBox(
-            main_frame,
+    def _create_css_section(self, parent):
+        """Create CSS options section"""
+        css_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        css_frame.pack(fill="x", pady=(0, 15))
+
+        css_label = ctk.CTkLabel(
+            css_frame,
+            text="🎭 CSS Options:",
+            font=("Arial", 14, "bold")
+        )
+        css_label.pack(anchor="w", pady=(0, 5))
+
+        self.embed_css_var = ctk.BooleanVar(value=False)
+        embed_css_check = ctk.CTkCheckBox(
+            css_frame,
             text="Embed CSS in HTML file (for standalone use)",
-            variable=self.embed_var
+            variable=self.embed_css_var,
+            command=self._update_summary
         )
-        embed_check.pack(pady=(0, 10))
+        embed_css_check.pack(anchor="w", pady=2)
 
-        # Media embedding option (NEW)
+        css_info = ctk.CTkLabel(
+            css_frame,
+            text="💡 If unchecked, theme files will be copied alongside the HTML file",
+            font=("Arial", 11),
+            text_color="gray"
+        )
+        css_info.pack(anchor="w", pady=(5, 0))
+
+    def _create_media_section(self, parent):
+        """Create media embedding section (NEW)"""
+        media_frame = ctk.CTkFrame(parent, fg_color=("gray90", "gray20"))
+        media_frame.pack(fill="x", pady=(0, 15), padx=5)
+
+        # Media section header
+        media_header = ctk.CTkFrame(media_frame, fg_color="transparent")
+        media_header.pack(fill="x", padx=15, pady=(15, 10))
+
+        media_title = ctk.CTkLabel(
+            media_header,
+            text="🖼️ Media Embedding:",
+            font=("Arial", 14, "bold")
+        )
+        media_title.pack(side="left")
+
+        # Media stats badge
+        if self.size_stats['total_files'] > 0:
+            stats_text = f"{self.size_stats['valid_files']}/{self.size_stats['total_files']} files"
+            stats_color = "green" if self.size_stats['valid_files'] == self.size_stats['total_files'] else "orange"
+        else:
+            stats_text = "No media files"
+            stats_color = "gray"
+
+        stats_badge = ctk.CTkLabel(
+            media_header,
+            text=stats_text,
+            font=("Arial", 11),
+            text_color=stats_color
+        )
+        stats_badge.pack(side="right")
+
+        # Media embedding checkbox
         self.embed_media_var = ctk.BooleanVar(value=False)
         embed_media_check = ctk.CTkCheckBox(
-            main_frame,
-            text="Embed media as base64 data (creates self-contained HTML)",
-            variable=self.embed_media_var
+            media_frame,
+            text="Embed all media files as base64 data URLs",
+            variable=self.embed_media_var,
+            command=self._on_media_embed_change
         )
-        embed_media_check.pack(pady=(0, 20))
+        embed_media_check.pack(anchor="w", padx=15, pady=5)
 
-        # Info label (updated)
-        info_label = ctk.CTkLabel(
-            main_frame,
-            text="Note: Embedding media as base64 will increase file size but creates\na fully self-contained HTML file with no external dependencies.",
+        # Media details frame (initially hidden)
+        self.media_details_frame = ctk.CTkFrame(media_frame, fg_color="transparent")
+
+        if self.size_stats['total_files'] > 0:
+            self._create_media_details()
+        else:
+            no_media_label = ctk.CTkLabel(
+                self.media_details_frame,
+                text="📝 No media files found in current SOP",
+                font=("Arial", 11),
+                text_color="gray"
+            )
+            no_media_label.pack(pady=10)
+
+        self.media_details_frame.pack(fill="x", padx=15, pady=(0, 15))
+
+    def _create_media_details(self):
+        """Create detailed media information display"""
+        # Size information
+        size_info_frame = ctk.CTkFrame(self.media_details_frame, fg_color="transparent")
+        size_info_frame.pack(fill="x", pady=5)
+
+        size_text = (
+            f"📊 Total: {self.size_stats['total_files']} files "
+            f"({self.size_stats['total_original_size_mb']:.1f}MB)\n"
+            f"🔄 Embedded size: ~{self.size_stats['total_embedded_size_mb']:.1f}MB "
+            f"(+{self.size_stats['size_increase_percent']:.0f}%)"
+        )
+
+        size_label = ctk.CTkLabel(
+            size_info_frame,
+            text=size_text,
             font=("Arial", 11),
-            text_color="gray",
-            wraplength=450
+            justify="left"
         )
-        info_label.pack(pady=(0, 20))
+        size_label.pack(anchor="w")
 
-        # Buttons
-        button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        # Warnings for large files
+        if self.size_stats['exceeds_warning_threshold']:
+            warning_frame = ctk.CTkFrame(self.media_details_frame, fg_color="orange")
+            warning_frame.pack(fill="x", pady=5)
+
+            warning_text = "⚠️ Large file size detected. Embedded HTML may be slow to load."
+            if self.size_stats['exceeds_size_limit']:
+                warning_text = "🚫 Total size exceeds recommended limit. Consider reducing media files."
+                warning_frame.configure(fg_color="red")
+
+            warning_label = ctk.CTkLabel(
+                warning_frame,
+                text=warning_text,
+                font=("Arial", 11, "bold"),
+                text_color="white"
+            )
+            warning_label.pack(pady=8)
+
+        # Large files list
+        if self.size_stats['large_files']:
+            large_files_frame = ctk.CTkFrame(self.media_details_frame, fg_color="transparent")
+            large_files_frame.pack(fill="x", pady=5)
+
+            large_files_label = ctk.CTkLabel(
+                large_files_frame,
+                text=f"📋 Large files ({len(self.size_stats['large_files'])}):",
+                font=("Arial", 11, "bold")
+            )
+            large_files_label.pack(anchor="w")
+
+            for large_file in self.size_stats['large_files'][:3]:  # Show first 3
+                file_name = Path(large_file['path']).name
+                file_text = f"   • {file_name} ({large_file['size_mb']:.1f}MB)"
+                file_label = ctk.CTkLabel(
+                    large_files_frame,
+                    text=file_text,
+                    font=("Arial", 10),
+                    text_color="gray"
+                )
+                file_label.pack(anchor="w")
+
+            if len(self.size_stats['large_files']) > 3:
+                more_label = ctk.CTkLabel(
+                    large_files_frame,
+                    text=f"   ... and {len(self.size_stats['large_files']) - 3} more",
+                    font=("Arial", 10),
+                    text_color="gray"
+                )
+                more_label.pack(anchor="w")
+
+        # Benefits explanation
+        benefits_frame = ctk.CTkFrame(self.media_details_frame, fg_color="transparent")
+        benefits_frame.pack(fill="x", pady=5)
+
+        benefits_text = (
+            "✅ Benefits: Single file sharing, no asset folders, works offline\n"
+            "⚠️ Drawbacks: Larger file size, slower loading for large media"
+        )
+
+        benefits_label = ctk.CTkLabel(
+            benefits_frame,
+            text=benefits_text,
+            font=("Arial", 10),
+            text_color="gray",
+            justify="left"
+        )
+        benefits_label.pack(anchor="w")
+
+    def _create_summary_section(self, parent):
+        """Create export summary section"""
+        self.summary_frame = ctk.CTkFrame(parent, fg_color=("gray85", "gray25"))
+        self.summary_frame.pack(fill="x", pady=(0, 15))
+
+        summary_label = ctk.CTkLabel(
+            self.summary_frame,
+            text="📋 Export Summary:",
+            font=("Arial", 14, "bold")
+        )
+        summary_label.pack(anchor="w", padx=15, pady=(15, 5))
+
+        self.summary_text = ctk.CTkLabel(
+            self.summary_frame,
+            text="",
+            font=("Arial", 11),
+            justify="left",
+            anchor="w"
+        )
+        self.summary_text.pack(anchor="w", padx=15, pady=(0, 15))
+
+        self._update_summary()
+
+    def _create_buttons(self, parent):
+        """Create action buttons"""
+        button_frame = ctk.CTkFrame(parent, fg_color="transparent")
         button_frame.pack(fill="x", pady=(20, 0))
 
         export_btn = ctk.CTkButton(
             button_frame,
-            text="Export",
+            text="📄 Export HTML",
             command=self._export,
-            width=100
+            width=120,
+            height=35,
+            font=("Arial", 12, "bold"),
+            fg_color="green",
+            hover_color="darkgreen"
         )
         export_btn.pack(side="right", padx=(10, 0))
 
         cancel_btn = ctk.CTkButton(
             button_frame,
-            text="Cancel",
+            text="❌ Cancel",
             command=self._cancel,
             width=100,
-            fg_color="gray"
+            height=35,
+            font=("Arial", 12),
+            fg_color="gray",
+            hover_color="darkgray"
         )
         cancel_btn.pack(side="right")
 
+    def _on_theme_change(self, value):
+        """Handle theme selection change"""
+        self._update_summary()
+
+    def _on_media_embed_change(self):
+        """Handle media embedding checkbox change"""
+        self._update_summary()
+
+    def _update_summary(self):
+        """Update the export summary display"""
+        summary_parts = []
+
+        # Theme info
+        theme_name = self.theme_var.get()
+        summary_parts.append(f"🎨 Theme: {theme_name}")
+
+        # CSS embedding
+        if self.embed_css_var.get():
+            summary_parts.append("🎭 CSS: Embedded in HTML")
+        else:
+            summary_parts.append("🎭 CSS: External file (copied)")
+
+        # Media embedding
+        if self.embed_media_var.get() and self.size_stats['total_files'] > 0:
+            summary_parts.append(
+                f"🖼️ Media: {self.size_stats['valid_files']} files embedded "
+                f"(~{self.size_stats['total_embedded_size_mb']:.1f}MB)"
+            )
+        elif self.size_stats['total_files'] > 0:
+            summary_parts.append(
+                f"🖼️ Media: {self.size_stats['total_files']} files copied to Assets folder"
+            )
+        else:
+            summary_parts.append("🖼️ Media: No media files")
+
+        # File structure
+        if self.embed_css_var.get() and self.embed_media_var.get():
+            summary_parts.append("📁 Output: Single HTML file (completely self-contained)")
+        elif self.embed_css_var.get() or self.embed_media_var.get():
+            summary_parts.append("📁 Output: HTML file + minimal assets")
+        else:
+            summary_parts.append("📁 Output: HTML file + Assets folder")
+
+        summary_text = "\n".join(summary_parts)
+        self.summary_text.configure(text=summary_text)
+
     def _export(self):
         """Handle export button click"""
+        # Check for size warnings if media embedding is enabled
+        if (self.embed_media_var.get() and
+                self.size_stats['total_files'] > 0 and
+                self.size_stats['exceeds_warning_threshold']):
+
+            size_mb = self.size_stats['total_embedded_size_mb']
+            warning_msg = (
+                f"The embedded file will be approximately {size_mb:.1f}MB.\n\n"
+                "Large embedded files may:\n"
+                "• Take longer to load in web browsers\n"
+                "• Use more memory\n"
+                "• Be difficult to share via email\n\n"
+                "Do you want to continue?"
+            )
+
+            if self.size_stats['exceeds_size_limit']:
+                warning_msg = (
+                    f"WARNING: The embedded file will be {size_mb:.1f}MB!\n\n"
+                    "This exceeds recommended limits and may:\n"
+                    "• Fail to load in some browsers\n"
+                    "• Cause performance issues\n"
+                    "• Be rejected by email systems\n\n"
+                    "Consider unchecking media embedding or reducing file sizes.\n\n"
+                    "Continue anyway?"
+                )
+
+            result = messagebox.askyesno("Large File Warning", warning_msg)
+            if not result:
+                return
+
+        # Get export filename
         self.filename = filedialog.asksaveasfilename(
             title="Export SOP as HTML",
             defaultextension=".html",
@@ -641,8 +968,8 @@ class ExportDialog:
         )
 
         if self.filename:
-            self.embed_css = self.embed_var.get()
-            self.embed_media_base64 = self.embed_media_var.get()  # Store the new option
+            self.embed_css = self.embed_css_var.get()
+            self.embed_media = self.embed_media_var.get()
             self.selected_theme = self.theme_var.get()
             self.result = True
             self.dialog.destroy()
