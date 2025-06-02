@@ -384,6 +384,9 @@ class HTMLGenerator:
         # Generate JavaScript
         scripts = self._generate_scripts()
 
+        # Add back-to-top button to content
+        content_html += '\n\n<!-- Back to Top Button -->\n<a href="#" class="back-to-top" id="backToTop"></a>'
+
         # Combine everything
         html = self.base_template.format(
             title=title,
@@ -667,6 +670,20 @@ class HTMLGenerator:
             }
         }
     };
+    
+    // Smooth scroll for Back to Top button
+    document.addEventListener('DOMContentLoaded', function() {
+        const backToTopButton = document.getElementById('backToTop');
+        if (backToTopButton) {
+            backToTopButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                window.scrollTo({
+                    top: 0,
+                    behavior: 'smooth'
+                });
+            });
+        }
+    })
     
     // Escape key to close modal
     document.addEventListener('keydown', function(e) {
