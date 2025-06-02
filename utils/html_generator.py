@@ -1,4 +1,4 @@
-# utils/html_generator.py - Phase 3: Enhanced with Media Embedding
+# utils/html_generator.py - Phase 3: Enhanced with Media Embedding - FIXED
 from typing import List, Dict, Optional, Set, Tuple, Any, Callable
 from modules.base_module import Module
 from modules.complex_module import TabModule
@@ -539,16 +539,6 @@ class HTMLGenerator:
             sections.append(current_section)
 
         return sections
-
-    def _load_theme_css(self) -> str:
-        """Load CSS content from theme file"""
-        theme_path = self.themes_dir / f"{self.theme_name}.css"
-        if theme_path.exists():
-            with open(theme_path, 'r', encoding='utf-8') as f:
-                return f.read()
-        else:
-            # Fallback to default styles if theme not found
-            return self._generate_default_styles()
 
     def _copy_theme_to_output(self, output_dir: Path):
         """Copy theme CSS file to output directory"""
