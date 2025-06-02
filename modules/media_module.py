@@ -44,6 +44,23 @@ class MediaModule(Module):
         # If it's already a relative path, use as-is
         return cleaned_path
 
+    def get_media_references(self) -> List[str]:
+        """Return all media file paths used by this module"""
+        media_refs = []
+
+        source = self.content_data.get('source', '')
+        if source and source.strip():
+            media_refs.append(source)
+
+        return media_refs
+
+    def update_media_references(self, path_mapping: Dict[str, str]):
+        """Update all media paths using the provided mapping"""
+        source = self.content_data.get('source', '')
+
+        if source and source in path_mapping:
+            self.content_data['source'] = path_mapping[source]
+
     def _format_text_content(self, text: str) -> str:
         """Format text content with bullets, numbers, and bold"""
         if not text:
