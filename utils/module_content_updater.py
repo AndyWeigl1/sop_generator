@@ -67,6 +67,21 @@ class ModuleContentUpdater:
             module: Module to update
             path_mapping: Path to base64 URL mapping
         """
+        # Debug: Log the module and its media references before update
+        if hasattr(module, 'get_media_references'):
+            original_refs = module.get_media_references()
+            if original_refs:
+                print(f"📝 Updating {module.module_type} module:")
+                for ref in original_refs:
+                    normalized_ref = self._normalize_path_for_lookup(ref)
+                    is_in_mapping = normalized_ref in path_mapping
+                    print(f"   Original: {ref}")
+                    print(f"   Normalized: {normalized_ref}")
+                    print(f"   In mapping: {is_in_mapping}")
+                    if not is_in_mapping:
+                        # Show available mapping keys for debugging
+                        print(f"   Available keys: {list(path_mapping.keys())[:3]}...")
+
         # Update the module's own media references
         if hasattr(module, 'update_media_references'):
             module.update_media_references(path_mapping)
@@ -74,6 +89,26 @@ class ModuleContentUpdater:
         # Handle TabModule nested content
         if isinstance(module, TabModule):
             self._update_tab_module_media(module, path_mapping)
+
+    def _normalize_path_for_lookup(self, file_path: str) -> str:
+        """
+        Normalize file path for mapping lookup (should match MediaDiscoveryService logic)
+        """
+        if not file_path:
+            return ''
+
+        # Remove quotes and extra whitespace
+        cleaned_path = file_path.strip().strip('"\'')
+
+        # Convert to Path object for normalization
+        from pathlib import Path
+        path_obj = Path(cleaned_path)
+
+        # Return absolute path if it exists, otherwise return as-is
+        if path_obj.exists():
+            return str(path_obj.resolve())
+        else:
+            return cleaned_path
 
     def _update_tab_module_media(self, tab_module: TabModule, path_mapping: Dict[str, str]):
         """
@@ -114,6 +149,7 @@ class ModuleContentUpdater:
     def get_all_media_references(self, modules: List[Module]) -> Set[str]:
         """
         Collect all media file references from a list of modules
+        Enhanced with debugging to track down strange references
 
         Args:
             modules: List of modules to scan
@@ -124,31 +160,54 @@ class ModuleContentUpdater:
         all_media = set()
 
         for module in modules:
+            print(f"🔍 Scanning {module.module_type} module (ID: {module.id[:8]})")
             module_media = self._get_module_media_references(module)
+
+            # Debug each media reference found
+            for media_ref in module_media:
+                print(f"   Found media ref: '{media_ref}' (type: {type(media_ref)})")
+
+                # Check for suspicious references
+                if len(media_ref) < 10 and any(c in media_ref for c in '=+/'):
+                    print(f"   ⚠️ SUSPICIOUS: This looks like base64 data, not a file path!")
+                    print(f"   ⚠️ Module content_data: {module.content_data}")
+
             all_media.update(module_media)
+
+        print(f"📊 Total unique media references found: {len(all_media)}")
+        for ref in all_media:
+            print(f"   - '{ref}'")
 
         return all_media
 
     def _get_module_media_references(self, module: Module) -> Set[str]:
         """
         Get all media references from a single module
-
-        Args:
-            module: Module to scan
-
-        Returns:
-            Set of media file paths from this module
+        Enhanced with debugging
         """
         media_refs = set()
 
         # Get media references from the module if it supports the method
         if hasattr(module, 'get_media_references'):
-            module_refs = module.get_media_references()
-            media_refs.update(ref for ref in module_refs if ref and ref.strip())
+            try:
+                module_refs = module.get_media_references()
+                print(f"   Module returned {len(module_refs)} references")
+
+                for ref in module_refs:
+                    if ref and ref.strip():
+                        cleaned_ref = ref.strip()
+                        print(f"   Adding reference: '{cleaned_ref}'")
+                        media_refs.add(cleaned_ref)
+                    else:
+                        print(f"   Skipping empty/None reference: {repr(ref)}")
+
+            except Exception as e:
+                print(f"   ❌ Error getting media references: {e}")
 
         # Handle TabModule nested content
         if isinstance(module, TabModule):
             for tab_name, nested_modules in module.sub_modules.items():
+                print(f"   Scanning tab '{tab_name}' with {len(nested_modules)} nested modules")
                 for nested_module in nested_modules:
                     nested_refs = self._get_module_media_references(nested_module)
                     media_refs.update(nested_refs)
@@ -159,29 +218,40 @@ class ModuleContentUpdater:
                                path_mapping: Dict[str, str]) -> Dict[str, List[str]]:
         """
         Validate that all media references in modules have corresponding mappings
+        Enhanced with better debugging information
 
         Args:
             modules: Modules to validate
             path_mapping: Available path mappings
 
         Returns:
-            Dictionary with 'missing' and 'found' lists
+            Dictionary with 'missing' and 'found' lists plus debugging info
         """
         all_media = self.get_all_media_references(modules)
 
         missing_mappings = []
         found_mappings = []
+        debug_info = []
 
         for media_path in all_media:
-            if media_path in path_mapping:
+            normalized_path = self._normalize_path_for_lookup(media_path)
+
+            if normalized_path in path_mapping:
                 found_mappings.append(media_path)
             else:
                 missing_mappings.append(media_path)
+                # Add debug info for missing mappings
+                debug_info.append({
+                    'original': media_path,
+                    'normalized': normalized_path,
+                    'reason': 'not_found_in_mapping'
+                })
 
         return {
             'missing': missing_mappings,
             'found': found_mappings,
-            'total_references': len(all_media)
+            'total_references': len(all_media),
+            'debug_info': debug_info  # New debug information
         }
 
     def restore_original_modules(self) -> List[Module]:
