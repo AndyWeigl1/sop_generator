@@ -238,8 +238,11 @@ class MediaGridModule(Module):
             for item in items:
                 if isinstance(item, dict):
                     source = item.get('source', '')
-                    if source and source in path_mapping:
-                        item['source'] = path_mapping[source]
+                    if source and source.strip():
+                        # Normalize the path before lookup
+                        normalized_source = self._normalize_media_path(source)
+                        if normalized_source in path_mapping:
+                            item['source'] = path_mapping[normalized_source]
 
     def update_content(self, key: str, value: Any):
         """Update specific content field with path normalization for media items"""
