@@ -7,6 +7,7 @@ from tkinter import filedialog, messagebox
 from gui.components.text_formatting_toolbar import TextFormattingToolbar
 import os
 import json
+from gui.preview_manager import ModulePreviewPanel
 
 
 class PropertiesPanel:
@@ -26,6 +27,10 @@ class PropertiesPanel:
             corner_radius=0
         )
         self.scroll_frame.pack(fill="both", expand=True)
+
+        # ADD THIS LINE HERE (after scroll_frame is created):
+        from gui.preview_manager import ModulePreviewPanel
+        self.module_preview = ModulePreviewPanel(self.scroll_frame, app_instance)
 
         # Show empty state initially
         self._show_empty_state()
@@ -62,6 +67,9 @@ class PropertiesPanel:
         self.property_widgets.clear()
         self.current_module = None
         self.current_parent_tab = None
+        # Hide module preview
+        if hasattr(self, 'module_preview'):
+            self.module_preview.hide_preview()
 
     def show_module_properties(self, module: Module, parent_tab: Optional[Tuple['TabModule', str]] = None):
         """Display properties for the selected module with improved layout"""
@@ -78,6 +86,9 @@ class PropertiesPanel:
 
         # Properties Section
         self._create_properties_section(main_container, module)
+
+        # Add module preview at the end
+        self.module_preview.show_module_preview(module)
 
     def _create_header_section(self, parent, module: Module, parent_tab: Optional[Tuple['TabModule', str]] = None):
         """Create the header section with module info and controls"""
@@ -739,9 +750,14 @@ class PropertiesPanel:
                 self.app.remove_module(self.current_module.id)
 
     def _on_property_change(self, field_name: str, value: Any):
-        """Handle property value changes"""
+        """Handle property value changes (enhanced with live preview)"""
         if self.current_module:
             self.app.update_module_property(self.current_module, field_name, value)
+
+            # Update module preview immediately for real-time feedback
+            if hasattr(self, 'module_preview'):
+                # Small delay to prevent excessive updates during typing
+                self.scroll_frame.after(300, self.module_preview.update_preview)
 
     def _browse_file(self, field_name: str, entry_widget: ctk.CTkEntry):
         """Open file browser and update the entry widget"""
