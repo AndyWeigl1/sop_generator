@@ -391,14 +391,12 @@ class MainWindow:
                 {'name': '📍 Footer', 'type': 'footer', 'desc': 'Document footer with info'},
             ],
             "📝 Content": [
-                {'name': '📝 Text Content', 'type': 'text', 'desc': 'Paragraphs and formatted text'},
                 {'name': '⚠️ Disclaimer Box', 'type': 'disclaimer', 'desc': 'Important notices and warnings'},
-                {'name': '🔧 Issue Card', 'type': 'issue_card', 'desc': 'Common problems and solutions'},
-            ],
-            "📊 Data & Media": [
+                {'name': '📝 Text Content', 'type': 'text', 'desc': 'Paragraphs and formatted text'},
+                {'name': '📊 Table', 'type': 'table', 'desc': 'Data tables and charts'},
                 {'name': '🖼️ Media Item', 'type': 'media', 'desc': 'Single image or video with caption'},
                 {'name': '🎬 Media Grid', 'type': 'media_grid', 'desc': 'Multiple images in grid layout'},
-                {'name': '📊 Table', 'type': 'table', 'desc': 'Data tables and charts'},
+                {'name': '🔧 Issue Card', 'type': 'issue_card', 'desc': 'Common problems and solutions'},
             ]
         }
 
