@@ -507,10 +507,6 @@ class HTMLGenerator:
         """Wrap a module's content in a step card"""
         module_content = module.render_to_html()
 
-        # For modules that already have card styling (like step_card), use them as-is
-        if module.module_type == 'step_card':
-            return module_content
-
         # For other modules, wrap them in a card
         return f'''
     <div class="step-card">
