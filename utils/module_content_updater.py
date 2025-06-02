@@ -265,7 +265,7 @@ class ModuleContentUpdater:
 
     def clear_backup(self):
         """Clear backed up modules to free memory"""
-        self.original_modules.clear()
+        # self.original_modules.clear()
         self.updated_modules.clear()
         self.path_mappings.clear()
 
