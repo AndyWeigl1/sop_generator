@@ -25,6 +25,31 @@ class Module(ABC):
         """Convert module content to HTML string"""
         pass
 
+    def _normalize_media_path(self, file_path: str) -> str:
+        """
+        Normalize file path for consistent mapping lookup
+        MUST match MediaDiscoveryService._normalize_path
+        """
+        if not file_path:
+            return ''
+
+        # Remove quotes and extra whitespace
+        cleaned_path = file_path.strip().strip('"\'')
+
+        # Convert to Path object for normalization
+        from pathlib import Path
+        path_obj = Path(cleaned_path)
+
+        # Return absolute path with consistent separator
+        if path_obj.exists():
+            # Convert to absolute path and ensure consistent separators
+            abs_path = str(path_obj.resolve())
+            # Always use forward slashes for consistency
+            return abs_path.replace('\\', '/')
+        else:
+            # For non-existent files, still normalize the format
+            return str(Path(cleaned_path)).replace('\\', '/')
+
     @abstractmethod
     def get_property_fields(self) -> Dict[str, str]:
         """Return fields that can be edited in properties panel"""
