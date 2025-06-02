@@ -185,8 +185,58 @@ class CanvasPanel:
         self.module_widget_manager.update_module_preview(module)
 
     def set_preview_mode(self, enabled: bool):
-        """Toggle between edit and preview modes - delegate to module widget manager"""
-        self.module_widget_manager.set_preview_mode(enabled)
+        """Toggle between edit and preview modes (FIXED VERSION)"""
+        self.preview_mode = enabled
+
+        if enabled:
+            # Preview mode - hide editing controls but keep content visible
+            self._hide_editing_controls()
+        else:
+            # Edit mode - show editing controls
+            self._show_editing_controls()
+
+    def _hide_editing_controls(self):
+        """Hide editing controls for preview mode"""
+        for widget_id, widget in self.module_widget_manager.module_widgets.items():
+            if not self._safe_widget_exists(widget):
+                continue
+
+            try:
+                # Find and hide control buttons in header
+                for child in widget.winfo_children():
+                    if isinstance(child, ctk.CTkFrame):  # Header frame
+                        for grandchild in child.winfo_children():
+                            if isinstance(grandchild, ctk.CTkFrame):  # Controls frame
+                                grandchild.pack_forget()
+                            elif hasattr(grandchild, 'text') and grandchild.cget('text') == '⋮⋮':
+                                grandchild.pack_forget()  # Hide drag handle
+            except tk.TclError:
+                pass
+
+        # Hide controls in tab modules too
+        for tab_id, tab_containers in self.tab_widget_manager.tab_widgets.items():
+            for tab_name, container in tab_containers.items():
+                if self._safe_widget_exists(container):
+                    # Hide tab controls
+                    parent = container.master
+                    while parent:
+                        if hasattr(parent, '_tab_selector_frame'):
+                            try:
+                                parent._tab_selector_frame.pack_forget()
+                                break
+                            except:
+                                pass
+                        parent = getattr(parent, 'master', None)
+
+    def _show_editing_controls(self):
+        """Show editing controls for edit mode"""
+        # Refresh the entire canvas to restore controls
+        self.module_widget_manager.refresh_widget_order()
+
+        # Restore tab controls
+        for module in self.app.active_modules:
+            if isinstance(module, TabModule):
+                self.tab_widget_manager.refresh_tab_module(module)
 
     def clear_tab_context(self):
         """Clear the tab context and reset to main canvas adding"""
