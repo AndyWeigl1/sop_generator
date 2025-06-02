@@ -611,75 +611,79 @@ class HTMLGenerator:
     def _generate_scripts(self) -> str:
         """Generate JavaScript for interactive elements including tab functionality"""
         return '''
-<script>
-// Tab functionality
-document.addEventListener('DOMContentLoaded', function() {
-    const tabs = document.querySelectorAll('.tab');
-    const sections = document.querySelectorAll('.section-content');
-
-    tabs.forEach((tab, index) => {
-        tab.addEventListener('click', () => {
-            // Remove active class from all tabs and sections
-            tabs.forEach(t => t.classList.remove('active'));
-            sections.forEach(s => s.classList.remove('active'));
-
-            // Add active class to clicked tab and corresponding section
-            tab.classList.add('active');
-            sections[index].classList.add('active');
+    <script>
+    // Tab functionality
+    document.addEventListener('DOMContentLoaded', function() {
+        const tabs = document.querySelectorAll('.tab');
+        const sections = document.querySelectorAll('.section-content');
+    
+        tabs.forEach((tab, index) => {
+            tab.addEventListener('click', () => {
+                // Remove active class from all tabs and sections
+                tabs.forEach(t => t.classList.remove('active'));
+                sections.forEach(s => s.classList.remove('active'));
+    
+                // Add active class to clicked tab and corresponding section
+                tab.classList.add('active');
+                sections[index].classList.add('active');
+            });
         });
     });
-});
-
-// Image modal functionality
-function openImageModal(img) {
-    const modal = document.getElementById('imageModal') || createModal();
-    const modalImg = modal.querySelector('img');
-    modal.style.display = "block";
-    modalImg.src = img.src;
-    document.body.style.overflow = 'hidden'; // Prevent background scrolling
-}
-
-function createModal() {
-    const modal = document.createElement('div');
-    modal.id = 'imageModal';
-    modal.className = 'modal';
-    modal.innerHTML = '<div class="modal-content"><img src="" alt="Enlarged image"></div>';
-
-    modal.onclick = function(event) {
-        if (event.target === modal) {
+    
+    // Image modal functionality - FIXED VERSION (matches working Lineage implementation)
+    document.addEventListener('DOMContentLoaded', function() {
+        // Create modal if it doesn't exist
+        if (!document.getElementById('imageModal')) {
+            const modal = document.createElement('div');
+            modal.id = 'imageModal';
+            modal.className = 'modal';
+            modal.innerHTML = '<div class="modal-content"><img id="modalImage" src="" alt="Enlarged image"></div>';
+            document.body.appendChild(modal);
+        }
+    
+        const modal = document.getElementById('imageModal');
+        const modalImg = document.getElementById('modalImage');
+    
+        function closeModal() {
             modal.style.display = "none";
             document.body.style.overflow = 'auto';
         }
+    
+        // Close on any click within modal
+        modal.addEventListener('click', closeModal);
+    
+        // Make functions globally available
+        window.openImageModal = function(img) {
+            modal.style.display = "block";
+            modalImg.src = img.src;
+            document.body.style.overflow = 'hidden';
+        };
+    });
+    
+    // Back to top functionality
+    window.onscroll = function() {
+        const backToTopButton = document.getElementById('backToTop');
+        if (backToTopButton) {
+            if (document.body.scrollTop > 500 || document.documentElement.scrollTop > 500) {
+                backToTopButton.classList.add('visible');
+            } else {
+                backToTopButton.classList.remove('visible');
+            }
+        }
     };
-
-    document.body.appendChild(modal);
-    return modal;
-}
-
-// Back to top functionality
-window.onscroll = function() {
-    const backToTopButton = document.getElementById('backToTop');
-    if (backToTopButton) {
-        if (document.body.scrollTop > 500 || document.documentElement.scrollTop > 500) {
-            backToTopButton.classList.add('visible');
-        } else {
-            backToTopButton.classList.remove('visible');
+    
+    // Escape key to close modal
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' || e.key === 'Esc') {
+            const modal = document.getElementById('imageModal');
+            if (modal && modal.style.display === 'block') {
+                modal.style.display = 'none';
+                document.body.style.overflow = 'auto';
+            }
         }
-    }
-};
-
-// Escape key to close modal
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' || e.key === 'Esc') {
-        const modal = document.getElementById('imageModal');
-        if (modal && modal.style.display === 'block') {
-            modal.style.display = 'none';
-            document.body.style.overflow = 'auto';
-        }
-    }
-});
-</script>
-'''
+    });
+    </script>
+    '''
 
     def get_available_themes(self) -> List[str]:
         """Get list of available themes"""
