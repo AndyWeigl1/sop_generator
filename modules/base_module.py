@@ -1,6 +1,6 @@
 # modules/base_module.py
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import uuid
 
 
@@ -29,6 +29,30 @@ class Module(ABC):
     def get_property_fields(self) -> Dict[str, str]:
         """Return fields that can be edited in properties panel"""
         pass
+
+    def update_media_references(self, path_mapping: Dict[str, str]):
+        """
+        Update all media paths in this module using the provided mapping
+
+        This is a default implementation that does nothing.
+        Modules with media content should override this method.
+
+        Args:
+            path_mapping: Dictionary mapping original file paths to new paths (usually base64 data URLs)
+        """
+        pass
+
+    def get_media_references(self) -> List[str]:
+        """
+        Return all media file paths used by this module
+
+        This is a default implementation that returns an empty list.
+        Modules with media content should override this method.
+
+        Returns:
+            List of media file paths (empty by default)
+        """
+        return []
 
     def update_content(self, key: str, value: Any):
         """Update specific content field"""
