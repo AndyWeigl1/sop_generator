@@ -205,6 +205,35 @@ class TabModule(Module):
             return True
         return False
 
+    def get_media_references(self) -> List[str]:
+        """
+        Return all media file paths used by this module and its nested modules
+
+        TabModule itself has no media, but its nested modules might
+        """
+        media_refs = []
+
+        # Collect media references from all nested modules
+        for tab_name, nested_modules in self.sub_modules.items():
+            for nested_module in nested_modules:
+                if hasattr(nested_module, 'get_media_references'):
+                    nested_refs = nested_module.get_media_references()
+                    media_refs.extend(nested_refs)
+
+        return media_refs
+
+    def update_media_references(self, path_mapping: Dict[str, str]):
+        """
+        Update all media paths in nested modules using the provided mapping
+
+        TabModule itself has no media, but its nested modules might
+        """
+        # Update media references in all nested modules
+        for tab_name, nested_modules in self.sub_modules.items():
+            for nested_module in nested_modules:
+                if hasattr(nested_module, 'update_media_references'):
+                    nested_module.update_media_references(path_mapping)
+
     def validate_tab_structure(self) -> bool:
         """Validate the internal consistency of the tab structure"""
         # Check that all tabs in content_data have corresponding entries
