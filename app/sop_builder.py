@@ -457,6 +457,7 @@ class SOPBuilderApp:
         filename = export_dialog.filename
         embed_css = export_dialog.embed_css
         embed_media = export_dialog.embed_media
+        embed_css_assets = export_dialog.embed_css_assets  # NEW - Get the CSS assets option
         selected_theme = export_dialog.selected_theme
 
         if filename:
@@ -518,13 +519,14 @@ class SOPBuilderApp:
                 else:
                     self.main_window.set_status("Generating HTML...", "blue")
 
-                # Generate HTML with enhanced options
+                # Generate HTML with enhanced options - UPDATED CALL
                 html_content = self.html_generator.generate_html(
                     self.active_modules,
                     title="Standard Operating Procedure",
                     output_dir=output_dir if not embed_media else None,  # No output_dir if embedding everything
                     embed_theme=embed_css,
                     embed_media=embed_media,
+                    embed_css_assets=embed_css_assets,  # NEW PARAMETER
                     progress_callback=progress_callback
                 )
 
@@ -541,6 +543,10 @@ class SOPBuilderApp:
                     if stats['total_files'] > 0:
                         success_msg += f"\n\n✅ {stats['valid_files']} media files embedded"
                         if embed_css:
+                            success_msg += "\n✅ CSS embedded"
+                        if embed_css_assets:
+                            success_msg += "\n✅ CSS assets embedded"
+                        if embed_css and embed_css_assets and embed_media:
                             success_msg += "\n✅ Completely self-contained HTML file created"
 
                         # Add size information
@@ -694,13 +700,16 @@ class SOPBuilderApp:
 class ExportDialog:
     """Enhanced dialog for export options including media embedding"""
 
+    """Enhanced dialog for export options including media embedding"""
+
     def __init__(self, parent, available_themes: List[str], modules: List):
         self.result = False
         self.filename = None
         self.embed_css = False
-        self.embed_media = False  # NEW
+        self.embed_media = False
+        self.embed_css_assets = False  # NEW - Initialize this
         self.selected_theme = "kodiak"
-        self.modules = modules  # Store modules for media discovery
+        self.modules = modules
 
         # Import the new services
         from utils.media_discovery import MediaDiscoveryService
@@ -716,7 +725,7 @@ class ExportDialog:
         # Create dialog window
         self.dialog = ctk.CTkToplevel(parent)
         self.dialog.title("Export SOP")
-        self.dialog.geometry("600x500")  # Made taller for new options
+        self.dialog.geometry("600x500")
         self.dialog.transient(parent)
         self.dialog.grab_set()
 
@@ -745,10 +754,10 @@ class ExportDialog:
         # Theme selection section
         self._create_theme_section(main_frame, available_themes)
 
-        # CSS options section
+        # CSS options section (UPDATED)
         self._create_css_section(main_frame)
 
-        # NEW: Media embedding section
+        # Media embedding section
         self._create_media_section(main_frame)
 
         # Export summary section
@@ -780,7 +789,7 @@ class ExportDialog:
         theme_menu.pack(anchor="w")
 
     def _create_css_section(self, parent):
-        """Create CSS options section"""
+        """Create CSS options section with asset embedding (COMPLETE VERSION)"""
         css_frame = ctk.CTkFrame(parent, fg_color="transparent")
         css_frame.pack(fill="x", pady=(0, 15))
 
@@ -791,6 +800,7 @@ class ExportDialog:
         )
         css_label.pack(anchor="w", pady=(0, 5))
 
+        # Embed CSS checkbox
         self.embed_css_var = ctk.BooleanVar(value=False)
         embed_css_check = ctk.CTkCheckBox(
             css_frame,
@@ -800,13 +810,26 @@ class ExportDialog:
         )
         embed_css_check.pack(anchor="w", pady=2)
 
+        # NEW: CSS assets embedding checkbox
+        self.embed_css_assets_var = ctk.BooleanVar(value=False)
+        embed_css_assets_check = ctk.CTkCheckBox(
+            css_frame,
+            text="Embed CSS assets (fonts, background images)",
+            variable=self.embed_css_assets_var,
+            command=self._update_summary
+        )
+        embed_css_assets_check.pack(anchor="w", pady=2)
+
         css_info = ctk.CTkLabel(
             css_frame,
-            text="💡 If unchecked, theme files will be copied alongside the HTML file",
+            text="💡 CSS assets include fonts (Gin_Round.otf) and background images\n"
+                 "   If unchecked, theme files will be copied alongside the HTML file",
             font=("Arial", 11),
-            text_color="gray"
+            text_color="gray",
+            justify="left"
         )
         css_info.pack(anchor="w", pady=(5, 0))
+
 
     def _create_media_section(self, parent):
         """Create media embedding section (NEW)"""
@@ -1016,7 +1039,7 @@ class ExportDialog:
         self._update_summary()
 
     def _update_summary(self):
-        """Update the export summary display"""
+        """Update the export summary display (UPDATED for CSS assets)"""
         summary_parts = []
 
         # Theme info
@@ -1025,7 +1048,10 @@ class ExportDialog:
 
         # CSS embedding
         if self.embed_css_var.get():
-            summary_parts.append("🎭 CSS: Embedded in HTML")
+            if self.embed_css_assets_var.get():
+                summary_parts.append("🎭 CSS: Embedded with assets (fonts, images)")
+            else:
+                summary_parts.append("🎭 CSS: Embedded in HTML (external assets)")
         else:
             summary_parts.append("🎭 CSS: External file (copied)")
 
@@ -1043,9 +1069,11 @@ class ExportDialog:
             summary_parts.append("🖼️ Media: No media files")
 
         # File structure
-        if self.embed_css_var.get() and self.embed_media_var.get():
+        if (self.embed_css_var.get() and self.embed_css_assets_var.get() and
+                self.embed_media_var.get()):
             summary_parts.append("📁 Output: Single HTML file (completely self-contained)")
-        elif self.embed_css_var.get() or self.embed_media_var.get():
+        elif (self.embed_css_var.get() or self.embed_css_assets_var.get() or
+              self.embed_media_var.get()):
             summary_parts.append("📁 Output: HTML file + minimal assets")
         else:
             summary_parts.append("📁 Output: HTML file + Assets folder")
@@ -1054,7 +1082,7 @@ class ExportDialog:
         self.summary_text.configure(text=summary_text)
 
     def _export(self):
-        """Handle export button click"""
+        """Handle export button click (UPDATED)"""
         # Check for size warnings if media embedding is enabled
         if (self.embed_media_var.get() and
                 self.size_stats['total_files'] > 0 and
@@ -1095,6 +1123,7 @@ class ExportDialog:
         if self.filename:
             self.embed_css = self.embed_css_var.get()
             self.embed_media = self.embed_media_var.get()
+            self.embed_css_assets = self.embed_css_assets_var.get()  # NOW PROPERLY DEFINED
             self.selected_theme = self.theme_var.get()
             self.result = True
             self.dialog.destroy()
