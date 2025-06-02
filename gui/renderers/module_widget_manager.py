@@ -236,8 +236,6 @@ class ModuleWidgetManager:
             return f"📝 {content}..." if len(content) >= 100 else f"📝 {content}"
         elif module.module_type == 'media':
             return f"🖼️ Media: {module.content_data.get('source', 'No source')}"
-        elif module.module_type == 'step_card':
-            return f"#{module.content_data.get('step_number', '1')} - {module.content_data.get('title', 'Step')}"
         elif module.module_type == 'table':
             return f"📊 Table: {module.content_data.get('title', 'Untitled')}"
         elif module.module_type == 'disclaimer':
