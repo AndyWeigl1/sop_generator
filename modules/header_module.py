@@ -19,6 +19,23 @@ class HeaderModule(Module):
             'document_label': 'Standard Operating Procedure'
         }
 
+    def get_media_references(self) -> List[str]:
+        """Return all media file paths used by this module"""
+        media_refs = []
+
+        logo_path = self.content_data.get('logo_path', '')
+        if logo_path and logo_path.strip():
+            media_refs.append(logo_path)
+
+        return media_refs
+
+    def update_media_references(self, path_mapping: Dict[str, str]):
+        """Update all media paths using the provided mapping"""
+        logo_path = self.content_data.get('logo_path', '')
+
+        if logo_path and logo_path in path_mapping:
+            self.content_data['logo_path'] = path_mapping[logo_path]
+
     def render_to_html(self) -> str:
         """Generate HTML for header module"""
         logo_html = ''
