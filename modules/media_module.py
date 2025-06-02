@@ -1,4 +1,4 @@
-# modules/media_module.py - FIXED with base64 validation
+# modules/media_module.py - FIXED with separate card title and media header
 from modules.base_module import Module
 from typing import Dict, Any, List
 import os
@@ -18,7 +18,8 @@ class MediaModule(Module):
             'source': '',  # File path or URL
             'alt_text': 'Image description',
             'caption': 'Image caption text (click to view full size)',
-            'header': 'Media Title',
+            'title': '',  # NEW: Card title (h3 at top of card) - separate from media header
+            'header': 'Media Title',  # Media container header (dark bar above image)
             'max_width': '800px',
             'max_height': '',  # Optional max height
             'clickable': True,  # Enable modal view
@@ -176,9 +177,14 @@ class MediaModule(Module):
         return '\n'.join(formatted_lines)
 
     def render_to_html(self) -> str:
-        """Generate HTML for media module"""
+        """Generate HTML for media module with separate card title and media header"""
         # Normalize the source path
         source_path = self._normalize_file_path(self.content_data['source'])
+
+        # Card title (h3 at top of content) - NEW
+        card_title_html = ''
+        if self.content_data.get('title'):
+            card_title_html = f'<h3>{self.content_data["title"]}</h3>\n'
 
         # Content before media
         content_before_html = ''
@@ -189,11 +195,12 @@ class MediaModule(Module):
                 {formatted_content}
             </div>'''
 
-        header_html = ''
+        # Media container header (dark bar above image)
+        media_header_html = ''
         if self.content_data.get('header'):
             # Add proper CSS class for image vs video
             media_class = 'video' if self.content_data['media_type'] == 'video' else 'image'
-            header_html = f'''
+            media_header_html = f'''
             <div class="media-header {media_class}">
                 {self.content_data['header']}
             </div>'''
@@ -245,15 +252,19 @@ class MediaModule(Module):
         if self.content_data.get('max_height'):
             style_attrs += f"; --media-max-height: {self.content_data['max_height']}"
 
-        # Combine all elements
+        # Combine all elements with card title at the top
         html_parts = []
+
+        # Add card title first if it exists
+        if card_title_html:
+            html_parts.append(card_title_html.strip())
 
         if content_before_html:
             html_parts.append(content_before_html)
 
         html_parts.append(f'''
         <div class="media-container" style="{style_attrs}">
-            {header_html}
+            {media_header_html}
             <div class="media-content">
                 {media_html}
             </div>
@@ -267,11 +278,12 @@ class MediaModule(Module):
 
     def get_property_fields(self) -> Dict[str, str]:
         return {
+            'title': 'text',  # NEW: Card title field
             'media_type': 'dropdown:image,video',
             'source': 'file_or_url',
             'alt_text': 'text',
             'caption': 'textarea',
-            'header': 'text',
+            'header': 'text',  # Media container header
             'content_before': 'textarea:formatted',  # Enable formatting toolbar
             'content_after': 'textarea:formatted',  # Enable formatting toolbar
             'max_width': 'text',
