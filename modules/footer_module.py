@@ -1,6 +1,6 @@
 # modules/footer_module.py
 from modules.base_module import Module
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 
 class FooterModule(Module):
@@ -19,6 +19,23 @@ class FooterModule(Module):
             'additional_text': '',
             'show_copyright': True
         }
+
+    def get_media_references(self) -> List[str]:
+        """Return all media file paths used by this module"""
+        media_refs = []
+
+        background_image = self.content_data.get('background_image', '')
+        if background_image and background_image.strip():
+            media_refs.append(background_image)
+
+        return media_refs
+
+    def update_media_references(self, path_mapping: Dict[str, str]):
+        """Update all media paths using the provided mapping"""
+        background_image = self.content_data.get('background_image', '')
+
+        if background_image and background_image in path_mapping:
+            self.content_data['background_image'] = path_mapping[background_image]
 
     def render_to_html(self) -> str:
         """Generate HTML for footer"""
