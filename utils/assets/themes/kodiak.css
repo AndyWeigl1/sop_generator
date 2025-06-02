@@ -556,7 +556,7 @@ body {
 }
 
 .step-card .media-container {
-    margin: 1rem 0;
+    margin: 1rem auto;
 }
 
 .step-card .table-module {
