@@ -745,20 +745,40 @@ class PropertiesPanel:
 
     def _browse_file(self, field_name: str, entry_widget: ctk.CTkEntry):
         """Open file browser and update the entry widget"""
-        # Determine file types based on field name
-        if field_name in ['logo_path', 'background_image', 'source'] and 'media' in self.current_module.module_type:
-            filetypes = [
-                ("Image files", "*.jpg *.jpeg *.png *.gif *.bmp *.webp"),
-                ("Video files", "*.mp4 *.avi *.mov *.wmv"),
-                ("All files", "*.*")
-            ]
-        elif field_name in ['logo_path', 'background_image']:
-            filetypes = [
-                ("Image files", "*.jpg *.jpeg *.png *.gif *.bmp *.webp"),
-                ("All files", "*.*")
-            ]
+
+        # Define file type categories
+        MEDIA_FILETYPES = [
+            ("Image files", "*.jpg *.jpeg *.png *.gif *.bmp *.webp"),
+            ("Video files", "*.mp4 *.avi *.mov *.wmv"),
+            ("All files", "*.*")
+        ]
+
+        IMAGE_FILETYPES = [
+            ("Image files", "*.jpg *.jpeg *.png *.gif *.bmp *.webp"),
+            ("All files", "*.*")
+        ]
+
+        ALL_FILETYPES = [("All files", "*.*")]
+
+        # Categorize fields by expected file types
+        media_fields = {
+            'source',  # Media module
+            'issue_media_source',  # Issue card - issue media
+            'solution_single_media_source'  # Issue card - solution media
+        }
+
+        image_only_fields = {
+            'logo_path',
+            'background_image'
+        }
+
+        # Determine appropriate file types
+        if field_name in media_fields:
+            filetypes = MEDIA_FILETYPES
+        elif field_name in image_only_fields:
+            filetypes = IMAGE_FILETYPES
         else:
-            filetypes = [("All files", "*.*")]
+            filetypes = ALL_FILETYPES
 
         filename = filedialog.askopenfilename(
             title=f"Select {field_name.replace('_', ' ').title()}",
