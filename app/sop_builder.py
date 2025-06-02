@@ -13,6 +13,7 @@ from utils.html_generator import HTMLGenerator
 from utils.project_manager import ProjectManager
 from utils.media_discovery import MediaDiscoveryService
 from utils.base64_embedder import Base64EmbedderService
+from gui.preview_manager import DocumentPreviewManager
 
 
 class SOPBuilderApp:
@@ -34,6 +35,7 @@ class SOPBuilderApp:
         self.main_window = MainWindow(self)
         self.html_generator = HTMLGenerator()
         self.project_manager = ProjectManager()
+        self.preview_manager = DocumentPreviewManager(self)
 
         # Create GUI panels
         self.canvas_panel = CanvasPanel(self.main_window.canvas, self)
@@ -43,6 +45,8 @@ class SOPBuilderApp:
         self._setup_menu_handlers()
         self._populate_module_library()
         self._setup_enhanced_drag_drop()
+        self._setup_enhanced_preview()
+
 
     def _setup_enhanced_drag_drop(self):
         """Set up enhanced drag and drop integration between library and canvas"""
@@ -83,6 +87,39 @@ class SOPBuilderApp:
         self.main_window.save_btn.configure(command=self.save_project)
         self.main_window.export_btn.configure(command=self.export_to_html)
         self.main_window.preview_toggle.configure(command=self.toggle_preview)
+
+    def _setup_enhanced_preview(self):
+        """Setup enhanced preview functionality"""
+        # Replace the broken preview toggle with working functionality
+        original_command = self.main_window.preview_toggle.cget("command")
+        self.main_window.preview_toggle.configure(command=self.toggle_canvas_preview_mode)
+
+        # Add live preview button to menu
+        live_preview_btn = ctk.CTkButton(
+            self.main_window.menu_frame,
+            text="👁️ Live Preview",
+            width=130,
+            height=35,
+            font=("Arial", 12, "bold"),
+            fg_color="purple",
+            hover_color="darkmagenta",
+            command=self.preview_manager.toggle_live_preview
+        )
+        # Insert before export button
+        live_preview_btn.pack(side="left", padx=8, before=self.main_window.export_btn)
+
+    def toggle_canvas_preview_mode(self):
+        """Toggle canvas preview mode (fixed version)"""
+        preview_mode = self.main_window.preview_toggle.get()
+
+        if preview_mode:
+            # Enter preview mode - simplify view
+            self.canvas_panel.set_preview_mode(True)
+            self.main_window.set_status("Canvas Preview Mode - editing disabled", "orange")
+        else:
+            # Exit preview mode - restore editing
+            self.canvas_panel.set_preview_mode(False)
+            self.main_window.set_status("Edit mode - drag modules from left panel to canvas", "green")
 
     def _setup_base_template(self):
         """Create the base SOP template with Header, Tab Section (with content), and Footer"""
@@ -687,13 +724,24 @@ class SOPBuilderApp:
             self.root.title(title[:-2])
 
     def update_module_property(self, module: Module, property_name: str, value: any):
-        """Update a module property"""
+        """Update a module property (enhanced with preview updates)"""
         module.update_content(property_name, value)
+
         # Update canvas preview
         self.canvas_panel.update_module_preview(module)
-        # If it's a TabModule and we're updating tabs, refresh the tab UI
+
+        # Update live preview if enabled
+        if hasattr(self, 'preview_manager'):
+            self.preview_manager.request_preview_update()
+
+        # Update module-level preview in properties panel
+        if hasattr(self.properties_panel, 'module_preview'):
+            self.properties_panel.module_preview.update_preview()
+
+        # Handle special tab module updates
         if isinstance(module, TabModule) and property_name == 'tabs':
             self.canvas_panel._refresh_tab_module(module)
+
         self.set_modified(True)
 
     def run(self):
