@@ -11,8 +11,8 @@ class ResizablePanedWindow(ctk.CTkFrame):
         super().__init__(parent, **kwargs)
 
         # Initial proportions (as percentages)
-        self.left_weight = 65  # 65% for canvas
-        self.right_weight = 35  # 35% for properties panel (increased from ~25%)
+        self.left_weight = 60  # 65% for canvas
+        self.right_weight = 22  # 35% for properties panel (increased from ~25%)
         self.min_left_percent = 30  # Minimum 30% for canvas
         self.min_right_percent = 25  # Minimum 25% for properties
 
@@ -392,7 +392,6 @@ class MainWindow:
             ],
             "📝 Content": [
                 {'name': '📝 Text Content', 'type': 'text', 'desc': 'Paragraphs and formatted text'},
-                {'name': '📋 Step Card', 'type': 'step_card', 'desc': 'Numbered instruction steps'},
                 {'name': '⚠️ Disclaimer Box', 'type': 'disclaimer', 'desc': 'Important notices and warnings'},
                 {'name': '🔧 Issue Card', 'type': 'issue_card', 'desc': 'Common problems and solutions'},
             ],
@@ -752,7 +751,6 @@ AVAILABLE_MODULES = [
 
     # Content modules
     {'name': '📝 Text Content', 'type': 'text', 'category': 'content'},
-    {'name': '📋 Step Card', 'type': 'step_card', 'category': 'content'},
     {'name': '⚠️ Disclaimer Box', 'type': 'disclaimer', 'category': 'content'},
     {'name': '🔧 Issue Card', 'type': 'issue_card', 'category': 'content'},
 
