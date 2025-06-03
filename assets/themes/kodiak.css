@@ -358,10 +358,12 @@ body {
     color: var(--kodiak-brown);
 }
 
+/* Alternative solution - you can also add this to the general .media-grid rule */
 .media-grid {
     display: grid;
     gap: 2rem;
     margin: 2rem 0;
+    align-items: start; /* This will apply to all media grids */
 }
 
 .media-grid.side-by-side {
@@ -370,15 +372,12 @@ body {
 
 .media-grid .media-container {
     margin: 0;
-    height: 100%;
+    height: auto; /* Change to auto, or remove the height line */
     display: flex;
     flex-direction: column;
-    border: 1px solid rgba(74, 56, 40, 0.3) !important;
-    border-radius: 4px;
 }
 
 .media-grid .media-content {
-    flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -388,7 +387,7 @@ body {
 .media-grid .media-content img {
     width: 100%;
     height: auto;
-    max-height: 400px;
+    /* max-height: 400px;*/
     object-fit: contain;
 }
 
