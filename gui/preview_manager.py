@@ -72,21 +72,21 @@ class DocumentPreviewManager:
         self.app.main_window.set_status("Live preview closed", "gray")
 
     def _generate_preview_html(self):
-        """Generate HTML for preview"""
+        """Generate HTML for preview using file paths instead of base64 embedding"""
         try:
             # Create temp file
             if not self.temp_html_path:
                 temp_dir = Path(tempfile.gettempdir())
                 self.temp_html_path = temp_dir / "sop_preview.html"
 
-            # For Live Preview with LINKED assets
+            # For Live Preview with FILE PATHS (no base64 embedding)
             html_content = self.app.html_generator.generate_html(
                 self.app.active_modules,
                 title="SOP Preview",
-                embed_theme=True,      # Link to the original theme CSS file
-                embed_media=True,      # Link to original media files
-                embed_css_assets=True, # CSS assets will be linked via the linked CSS
-                output_dir=None         # Crucial: This signals to html_generator it's a preview
+                embed_theme=False,     # Link to the original theme CSS file (faster)
+                embed_media=False,     # Use file paths instead of base64 (FIXED!)
+                embed_css_assets=False, # Don't embed CSS assets like fonts (faster)
+                output_dir=None        # Signals to html_generator it's a preview
             )
 
             # Add auto-refresh meta tag
