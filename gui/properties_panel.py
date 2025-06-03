@@ -363,6 +363,9 @@ class PropertiesPanel:
         elif field_type == "table_editor":
             return self._create_table_editor(parent, field_name, current_value)
 
+        elif field_type == "sections_editor":
+            return self._create_sections_editor(parent, field_name, current_value, module)
+
         else:
             # Default to text entry
             widget = ctk.CTkEntry(parent, height=36, font=("Arial", 12))
@@ -371,6 +374,338 @@ class PropertiesPanel:
                 widget.insert(0, str(current_value))
             widget.bind("<KeyRelease>", lambda e: self._on_property_change(field_name, widget.get()))
             return widget
+
+    def _create_sections_editor(self, parent, field_name: str, current_value: Any, module: Module):
+        """Create advanced editor for table module sections"""
+        editor_frame = ctk.CTkFrame(parent, fg_color=("gray85", "gray25"))
+        editor_frame.pack(fill="x")
+
+        # Header
+        header_label = ctk.CTkLabel(
+            editor_frame,
+            text="Content & Table Sections",
+            font=("Arial", 13, "bold")
+        )
+        header_label.pack(pady=(15, 10))
+
+        # Instructions
+        instructions_label = ctk.CTkLabel(
+            editor_frame,
+            text="💡 Build your layout by adding content and table sections",
+            font=("Arial", 11),
+            text_color="gray"
+        )
+        instructions_label.pack(pady=(0, 10))
+
+        # Sections container
+        sections_container = ctk.CTkScrollableFrame(editor_frame, height=400)
+        sections_container.pack(fill="x", padx=15, pady=(0, 15))
+
+        # Store for tracking sections
+        self._sections_data = current_value if isinstance(current_value, list) else []
+
+        # Display current sections
+        self._refresh_sections_display(sections_container, field_name)
+
+        # Add section buttons
+        buttons_frame = ctk.CTkFrame(editor_frame, fg_color="transparent")
+        buttons_frame.pack(fill="x", padx=15, pady=(0, 15))
+
+        add_content_btn = ctk.CTkButton(
+            buttons_frame,
+            text="📝 Add Content",
+            height=32,
+            font=("Arial", 12),
+            fg_color="blue",
+            hover_color="darkblue",
+            command=lambda: self._add_section(sections_container, field_name, 'content')
+        )
+        add_content_btn.pack(side="left", padx=(0, 10))
+
+        add_table_btn = ctk.CTkButton(
+            buttons_frame,
+            text="📊 Add Table",
+            height=32,
+            font=("Arial", 12),
+            fg_color="green",
+            hover_color="darkgreen",
+            command=lambda: self._add_section(sections_container, field_name, 'table')
+        )
+        add_table_btn.pack(side="left")
+
+        return editor_frame
+
+    def _add_section(self, container, field_name: str, section_type: str):
+        """Add new section"""
+        if section_type == 'content':
+            new_section = {
+                'type': 'content',
+                'content': 'Enter your content here...'
+            }
+        elif section_type == 'table':
+            new_section = {
+                'type': 'table',
+                'title': 'New Table',
+                'headers': ['Column 1', 'Column 2'],
+                'rows': [['Data 1', 'Data 2'], ['Data 3', 'Data 4']],
+                'hover_effect': True,
+                'compact': False
+            }
+
+        self._sections_data.append(new_section)
+        self._refresh_sections_display(container, field_name)
+        self._on_property_change(field_name, self._sections_data)
+
+    def _refresh_sections_display(self, container, field_name: str):
+        """Refresh the sections display"""
+        # Clear existing widgets
+        for widget in container.winfo_children():
+            widget.destroy()
+
+        if not self._sections_data:
+            # Show empty state
+            empty_frame = ctk.CTkFrame(container, fg_color="transparent")
+            empty_frame.pack(fill="x", pady=20)
+
+            empty_label = ctk.CTkLabel(
+                empty_frame,
+                text="📝 No sections yet\n\nClick 'Add Content' or 'Add Table' to get started",
+                font=("Arial", 12),
+                text_color="gray",
+                justify="center"
+            )
+            empty_label.pack()
+            return
+
+        for i, section in enumerate(self._sections_data):
+            self._create_section_widget(container, i, section, field_name)
+
+    def _create_section_widget(self, parent, index: int, section: dict, field_name: str):
+        """Create widget for a single section"""
+        section_type = section.get('type', 'content')
+
+        # Main section frame
+        section_frame = ctk.CTkFrame(parent, fg_color=("gray80", "gray30"))
+        section_frame.pack(fill="x", pady=5)
+
+        # Header with type icon and controls
+        header_frame = ctk.CTkFrame(section_frame, fg_color="transparent")
+        header_frame.pack(fill="x", padx=10, pady=(10, 5))
+
+        # Section type and number
+        type_icon = "📝" if section_type == 'content' else "📊"
+        type_label = f"{type_icon} {section_type.title()} #{index + 1}"
+
+        section_label = ctk.CTkLabel(
+            header_frame,
+            text=type_label,
+            font=("Arial", 12, "bold")
+        )
+        section_label.pack(side="left")
+
+        # Controls frame
+        controls_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
+        controls_frame.pack(side="right")
+
+        # Move up button
+        if index > 0:
+            up_btn = ctk.CTkButton(
+                controls_frame,
+                text="↑",
+                width=25,
+                height=25,
+                font=("Arial", 10),
+                command=lambda: self._move_section(index, -1, parent, field_name)
+            )
+            up_btn.pack(side="left", padx=2)
+
+        # Move down button
+        if index < len(self._sections_data) - 1:
+            down_btn = ctk.CTkButton(
+                controls_frame,
+                text="↓",
+                width=25,
+                height=25,
+                font=("Arial", 10),
+                command=lambda: self._move_section(index, 1, parent, field_name)
+            )
+            down_btn.pack(side="left", padx=2)
+
+        # Remove button
+        remove_btn = ctk.CTkButton(
+            controls_frame,
+            text="❌",
+            width=30,
+            height=25,
+            fg_color="red",
+            hover_color="darkred",
+            font=("Arial", 10),
+            command=lambda: self._remove_section(index, parent, field_name)
+        )
+        remove_btn.pack(side="left", padx=2)
+
+        # Section content
+        content_frame = ctk.CTkFrame(section_frame, fg_color="transparent")
+        content_frame.pack(fill="x", padx=10, pady=(0, 10))
+
+        if section_type == 'content':
+            self._create_content_section_fields(content_frame, index, section, field_name)
+        elif section_type == 'table':
+            self._create_table_section_fields(content_frame, index, section, field_name)
+
+    def _remove_section(self, index: int, container, field_name: str):
+        """Remove section"""
+        if 0 <= index < len(self._sections_data):
+            self._sections_data.pop(index)
+            self._refresh_sections_display(container, field_name)
+            self._on_property_change(field_name, self._sections_data)
+
+    def _move_section(self, index: int, direction: int, container, field_name: str):
+        """Move section up or down"""
+        new_index = index + direction
+        if 0 <= new_index < len(self._sections_data):
+            # Swap sections
+            self._sections_data[index], self._sections_data[new_index] = \
+                self._sections_data[new_index], self._sections_data[index]
+
+            self._refresh_sections_display(container, field_name)
+            self._on_property_change(field_name, self._sections_data)
+
+    def _move_section(self, index: int, direction: int, container, field_name: str):
+        """Move section up or down"""
+        new_index = index + direction
+        if 0 <= new_index < len(self._sections_data):
+            # Swap sections
+            self._sections_data[index], self._sections_data[new_index] = \
+                self._sections_data[new_index], self._sections_data[index]
+
+            self._refresh_sections_display(container, field_name)
+            self._on_property_change(field_name, self._sections_data)
+
+    def _update_section_field(self, index: int, field: str, value: any, field_name: str):
+        """Update a specific field in a section"""
+        if 0 <= index < len(self._sections_data):
+            self._sections_data[index][field] = value
+            self._on_property_change(field_name, self._sections_data)
+
+    def _update_section_table_headers(self, index: int, headers_str: str, field_name: str):
+        """Update table headers from comma-separated string"""
+        if 0 <= index < len(self._sections_data):
+            headers = [h.strip() for h in headers_str.split(',') if h.strip()]
+            self._sections_data[index]['headers'] = headers
+            self._on_property_change(field_name, self._sections_data)
+
+    def _update_section_table_data(self, index: int, data_str: str, field_name: str):
+        """Update table data from JSON string"""
+        if 0 <= index < len(self._sections_data):
+            try:
+                rows = json.loads(data_str)
+                if isinstance(rows, list):
+                    self._sections_data[index]['rows'] = rows
+                    self._on_property_change(field_name, self._sections_data)
+            except json.JSONDecodeError:
+                # Invalid JSON, don't update
+                pass
+
+    def _create_table_section_fields(self, parent, index: int, section: dict, field_name: str):
+        """Create fields for table section"""
+        # Table title
+        ctk.CTkLabel(parent, text="Table Title:", font=("Arial", 11, "bold")).pack(anchor="w", pady=(5, 2))
+        title_entry = ctk.CTkEntry(parent, height=32, font=("Arial", 11))
+        title_entry.pack(fill="x", pady=(0, 5))
+        title_entry.insert(0, section.get('title', 'Table'))
+        title_entry.bind("<KeyRelease>",
+                         lambda e: self._update_section_field(index, 'title', title_entry.get(), field_name))
+
+        # Table headers
+        ctk.CTkLabel(parent, text="Headers (comma-separated):", font=("Arial", 11, "bold")).pack(anchor="w",
+                                                                                                 pady=(5, 2))
+        headers_entry = ctk.CTkEntry(parent, height=32, font=("Arial", 11))
+        headers_entry.pack(fill="x", pady=(0, 5))
+        headers = section.get('headers', [])
+        headers_entry.insert(0, ', '.join(headers) if headers else 'Column 1, Column 2')
+        headers_entry.bind("<KeyRelease>",
+                           lambda e: self._update_section_table_headers(index, headers_entry.get(), field_name))
+
+        # Table data
+        ctk.CTkLabel(parent, text="Table Data (JSON format):", font=("Arial", 11, "bold")).pack(anchor="w", pady=(5, 2))
+        data_text = ctk.CTkTextbox(parent, height=80, font=("Courier", 10))
+        data_text.pack(fill="x", pady=(0, 5))
+
+        # Format current rows as JSON
+        rows = section.get('rows', [])
+        try:
+            formatted_json = json.dumps(rows, indent=2)
+            data_text.insert("1.0", formatted_json)
+        except:
+            data_text.insert("1.0", '[["Data 1", "Data 2"], ["Data 3", "Data 4"]]')
+
+        data_text.bind("<KeyRelease>",
+                       lambda e: self._update_section_table_data(index, data_text.get("1.0", "end-1c"), field_name))
+
+        # Table options
+        options_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        options_frame.pack(fill="x", pady=(5, 0))
+
+        # Hover effect
+        hover_var = ctk.BooleanVar(value=section.get('hover_effect', True))
+        hover_check = ctk.CTkCheckBox(
+            options_frame,
+            text="Hover effect",
+            font=("Arial", 11),
+            variable=hover_var,
+            command=lambda: self._update_section_field(index, 'hover_effect', hover_var.get(), field_name)
+        )
+        hover_check.pack(side="left", padx=(0, 20))
+
+        # Compact mode
+        compact_var = ctk.BooleanVar(value=section.get('compact', False))
+        compact_check = ctk.CTkCheckBox(
+            options_frame,
+            text="Compact mode",
+            font=("Arial", 11),
+            variable=compact_var,
+            command=lambda: self._update_section_field(index, 'compact', compact_var.get(), field_name)
+        )
+        compact_check.pack(side="left")
+
+    def _create_content_section_fields(self, parent, index: int, section: dict, field_name: str):
+        """Create fields for content section"""
+        # Content textarea with formatting toolbar
+        ctk.CTkLabel(parent, text="Content:", font=("Arial", 11, "bold")).pack(anchor="w", pady=(5, 2))
+
+        # Create container for toolbar and textarea
+        content_container = ctk.CTkFrame(parent, fg_color="transparent")
+        content_container.pack(fill="x", pady=(0, 5))
+
+        content_text = ctk.CTkTextbox(
+            content_container,
+            height=100,
+            font=("Arial", 12),
+            wrap="word"
+        )
+
+        # Add formatting toolbar
+        from gui.components.text_formatting_toolbar import TextFormattingToolbar
+        toolbar = TextFormattingToolbar(
+            content_container,
+            content_text,
+            f"section_{index}_content",
+            lambda key, value: self._update_section_field(index, 'content', value, field_name)
+        )
+
+        # Pack the textbox below the toolbar
+        content_text.pack(fill="x")
+
+        # Set initial content
+        current_content = section.get('content', '')
+        if current_content:
+            content_text.insert("1.0", current_content)
+
+        # Bind change events
+        content_text.bind("<KeyRelease>",
+                          lambda e: self._update_section_field(index, 'content', content_text.get("1.0", "end-1c"),
+                                                               field_name))
 
     def _create_file_input(self, parent, field_name: str, current_value: Any):
         """Create file input with browse button"""
