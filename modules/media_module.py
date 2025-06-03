@@ -58,18 +58,19 @@ class MediaModule(Module):
         if not data_string or not isinstance(data_string, str):
             return False
 
-        # Check for data URL format
+        # Check for data URL format (most reliable indicator)
         if data_string.startswith('data:'):
             return True
 
-        # Check for short strings with base64 characters that look suspicious
-        if len(data_string) < 20 and any(c in data_string for c in '=+/'):
-            return True
+        # If it has obvious file path characteristics, it's NOT base64
+        if any(char in data_string for char in ['/', '\\', '.png', '.jpg', '.jpeg', '.gif', '.mp4', '.webm']):
+            return False
 
-        # Check if it looks like pure base64 (no file path characteristics)
-        if (len(data_string) > 10 and
+        # Check if it looks like pure base64 (no path separators, very long, base64 characters)
+        if (len(data_string) > 100 and  # Base64 data is typically much longer
                 not any(char in data_string for char in r'\/.:') and  # No path separators or extensions
-                data_string.replace('=', '').replace('+', '').replace('/', '').isalnum()):
+                data_string.replace('=', '').replace('+', '').replace('/', '').isalnum() and
+                len(data_string) % 4 == 0):  # Base64 length is typically multiple of 4
             return True
 
         return False
@@ -89,6 +90,11 @@ class MediaModule(Module):
                 print(f"⚠️ MediaModule: Source appears to be base64 data, not a file path: '{cleaned_source[:20]}...'")
                 return []  # Don't treat base64 data as a file reference
 
+            # Skip if already a URI/URL
+            if cleaned_source.startswith(('file://', 'http')):
+                print(f"⚠️ MediaModule: Source is already a URI/URL, skipping: '{cleaned_source[:50]}...'")
+                return []
+
             print(f"Adding MediaModule source: '{cleaned_source}'")
             media_refs.append(cleaned_source)
 
@@ -96,6 +102,7 @@ class MediaModule(Module):
         return media_refs
 
     def update_media_references(self, path_mapping: Dict[str, str]):
+        """Update all media paths using the provided mapping"""
         source = self.content_data.get('source', '')
         print(f"🔧 Original source: '{source}'")
 
@@ -105,17 +112,21 @@ class MediaModule(Module):
                 print(f"🔧 Source is already base64 data, skipping update")
                 return
 
-            normalized_source = self._normalize_media_path(source)
-            print(f"🔧 Normalized source: '{normalized_source}'")
-            print(f"🔧 Available mapping keys: {list(path_mapping.keys())}")
-            print(f"🔧 Is normalized in mapping: {normalized_source in path_mapping}")
+            # Skip if already a URI/URL
+            if source.startswith(('file://', 'data:', 'http')):
+                print(f"🔧 Source is already a URI/URL, skipping update")
+                return
 
-            if normalized_source in path_mapping:
+            # Find matching path using multiple strategies
+            new_path = self._find_matching_path_in_mapping(source, path_mapping)
+
+            if new_path:
                 old_source = self.content_data['source']
-                self.content_data['source'] = path_mapping[normalized_source]
-                print(f"🔧 Updated source from '{old_source}' to '{self.content_data['source'][:50]}...'")
+                self.content_data['source'] = new_path
+                print(f"🔧 Updated source from '{old_source}' to '{new_path[:50]}...'")
             else:
-                print(f"🔧 Could not find mapping for normalized path")
+                print(f"🔧 Could not find mapping for source: '{source}'")
+                print(f"🔧 Available mapping keys: {list(path_mapping.keys())}")
 
     def _format_text_content(self, text: str) -> str:
         """Format text content with bullets, numbers, and bold"""
