@@ -15,7 +15,7 @@ class FooterModule(Module):
             'organization': 'Your Organization',
             'department': 'Department Name',
             'revision_date': 'MM.DD.YYYY',
-            'background_image': None,
+            'background_image': 'assets/mountains.png',
             'additional_text': '',
             'show_copyright': True
         }
@@ -97,7 +97,7 @@ class FooterModule(Module):
             'organization': 'text',
             'department': 'text',
             'revision_date': 'text',
-            'background_image': 'file',
+            # 'background_image': 'file',
             'additional_text': 'textarea',
             'show_copyright': 'checkbox'
         }
