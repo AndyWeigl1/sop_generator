@@ -25,7 +25,13 @@ class HeaderModule(Module):
 
         logo_path = self.content_data.get('logo_path', '')
         if logo_path and logo_path.strip():
-            media_refs.append(logo_path)
+            cleaned_path = logo_path.strip()
+
+            # Skip if already a URI/URL
+            if not cleaned_path.startswith(('file://', 'data:', 'http')):
+                media_refs.append(cleaned_path)
+
+        return media_refs
 
         return media_refs
 
@@ -33,8 +39,19 @@ class HeaderModule(Module):
         """Update all media paths using the provided mapping"""
         logo_path = self.content_data.get('logo_path', '')
 
-        if logo_path and logo_path in path_mapping:
-            self.content_data['logo_path'] = path_mapping[logo_path]
+        if logo_path and logo_path.strip():
+            # Skip if already a URI/URL
+            if logo_path.startswith(('file://', 'data:', 'http')):
+                return
+
+            # Find matching path using multiple strategies
+            new_path = self._find_matching_path_in_mapping(logo_path, path_mapping)
+
+            if new_path:
+                print(f"   ✅ Updated logo_path: {logo_path} -> {new_path[:50]}...")
+                self.content_data['logo_path'] = new_path
+            else:
+                print(f"   ❌ No mapping found for logo_path: {logo_path}")
 
     def render_to_html(self) -> str:
         """Generate HTML for header module"""
