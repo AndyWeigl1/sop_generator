@@ -1,10 +1,10 @@
-# gui/preview_manager.py
+# gui/preview_manager.py - ENHANCED to handle user-selected files
 """
 Document Preview Manager
 
 Handles live preview functionality for the SOP Builder.
 Supports both full document preview and module-level preview.
-Now uses event-driven updates instead of continuous polling.
+Now uses event-driven updates and properly handles user-selected files.
 """
 
 import customtkinter as ctk
@@ -19,7 +19,7 @@ from utils.preview_server import LivePreviewServer
 
 
 class DocumentPreviewManager:
-    """Manages document preview functionality with event-driven updates"""
+    """Manages document preview functionality with event-driven updates and user file support"""
 
     def __init__(self, app_instance):
         self.app = app_instance
@@ -137,20 +137,64 @@ class DocumentPreviewManager:
         self._update_preview_button(False)
         self.app.main_window.set_status("Live preview closed", "gray")
 
+    def _register_user_files_with_server(self, modules: List) -> dict:
+        """
+        Register all user-selected files with the preview server
+
+        Args:
+            modules: List of modules to scan for user files
+
+        Returns:
+            Dictionary mapping original paths to HTTP URLs
+        """
+        if not self.preview_server.is_running:
+            return {}
+
+        # Collect all media references
+        from utils.media_discovery import MediaDiscoveryService
+        media_discovery = MediaDiscoveryService()
+        discovered_media = media_discovery.discover_all_media(modules)
+
+        path_mapping = {}
+
+        for original_path, media_info in discovered_media.items():
+            if media_info.exists and original_path:
+                # Check if this is a user-selected file (not in assets folder)
+                path_obj = Path(original_path)
+                assets_folder = Path.cwd() / "assets"
+
+                try:
+                    # If the file is not in the assets folder, it's a user-selected file
+                    path_obj.resolve().relative_to(assets_folder.resolve())
+                    # If we get here, the file IS in the assets folder, so it's a project asset
+                    # We'll let the regular asset serving handle this
+                    continue
+                except ValueError:
+                    # File is NOT in the assets folder, so it's a user-selected file
+                    # Register it with the preview server
+                    http_url = self.preview_server.register_user_file(original_path)
+                    path_mapping[original_path] = http_url
+                    print(f"📎 Registered user file: {Path(original_path).name}")
+
+        return path_mapping
+
     def _generate_websocket_html(self) -> str:
-        """Generate HTML with embedded WebSocket client"""
-        # Generate base HTML using HTTP URLs for assets instead of file URIs
+        """Generate HTML with embedded WebSocket client and proper file handling"""
+        # First, register user-selected files with the preview server
+        user_file_mapping = self._register_user_files_with_server(self.app.active_modules)
+
+        # Generate base HTML content
         html_content = self.app.html_generator.generate_html(
             self.app.active_modules,
             title="SOP Live Preview",
-            embed_theme=True,  # Embed CSS but convert asset URLs
+            embed_theme=True,  # Embed CSS for better performance
             embed_media=False,  # Don't embed media, use HTTP URLs
             embed_css_assets=False,  # Don't embed CSS assets, use HTTP URLs
             output_dir=None
         )
 
-        # Convert file URIs to HTTP URLs for the preview server
-        html_content = self._convert_file_uris_to_http_urls(html_content)
+        # Convert file URIs to appropriate HTTP URLs
+        html_content = self._convert_file_uris_to_http_urls(html_content, user_file_mapping)
 
         # Inject WebSocket client
         websocket_script = self._get_websocket_client_script()
@@ -163,27 +207,39 @@ class DocumentPreviewManager:
 
         return html_content
 
-    def _convert_file_uris_to_http_urls(self, html_content: str) -> str:
-        """Convert file:// URIs to HTTP URLs for the preview server"""
+    def _convert_file_uris_to_http_urls(self, html_content: str, user_file_mapping: dict) -> str:
+        """Convert file:// URIs to appropriate HTTP URLs"""
         import re
+        import urllib.parse
+        from pathlib import Path
 
         def replace_file_uri(match):
             file_uri = match.group(1)
             if file_uri.startswith('file:///'):
-                # Extract the filename from the file URI
-                import urllib.parse
-                from pathlib import Path
-
                 try:
                     # Decode the file URI to get the actual path
                     decoded_path = urllib.parse.unquote(file_uri)
-                    file_path = Path(decoded_path.replace('file:///', ''))
-                    filename = file_path.name
+                    file_path_str = decoded_path.replace('file:///', '')
 
-                    # Convert to HTTP URL served by our server
+                    # Normalize the path
+                    if file_path_str.startswith('/') and len(file_path_str) > 1 and file_path_str[1] == ':':
+                        # Windows path like /C:/Users/... -> C:/Users/...
+                        file_path_str = file_path_str[1:]
+
+                    file_path = Path(file_path_str)
+
+                    # Check if this file was registered as a user file
+                    for original_path, http_url in user_file_mapping.items():
+                        if Path(original_path).resolve() == file_path.resolve():
+                            print(f"🔗 Converted user file: {file_path.name} -> HTTP URL")
+                            return f'"{http_url}"'
+
+                    # If not a user file, treat as project asset
+                    filename = file_path.name
                     http_url = f"http://localhost:{self.preview_server.http_port}/assets/{filename}"
-                    print(f"🔗 Converted: {filename} -> HTTP URL")
+                    print(f"🔗 Converted asset: {filename} -> HTTP URL")
                     return f'"{http_url}"'
+
                 except Exception as e:
                     print(f"⚠️ Failed to convert file URI: {file_uri} - {e}")
                     return match.group(0)
@@ -376,10 +432,10 @@ class DocumentPreviewManager:
             html_content = self.app.html_generator.generate_html(
                 self.app.active_modules,
                 title="SOP Preview",
-                embed_theme=False,     # Link to the original theme CSS file (faster)
-                embed_media=False,     # Use file paths instead of base64 (FIXED!)
-                embed_css_assets=False, # Don't embed CSS assets like fonts (faster)
-                output_dir=None        # Signals to html_generator it's a preview
+                embed_theme=False,  # Link to the original theme CSS file (faster)
+                embed_media=False,  # Use file paths instead of base64 (FIXED!)
+                embed_css_assets=False,  # Don't embed CSS assets like fonts (faster)
+                output_dir=None  # Signals to html_generator it's a preview
             )
 
             # Add auto-refresh meta tag with longer interval since we're doing event-driven updates
