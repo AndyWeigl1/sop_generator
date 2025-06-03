@@ -734,10 +734,6 @@ class SOPBuilderApp:
         if hasattr(self, 'preview_manager'):
             self.preview_manager.request_preview_update()
 
-        # Update module-level preview in properties panel
-        if hasattr(self.properties_panel, 'module_preview'):
-            self.properties_panel.module_preview.update_preview()
-
         # Handle special tab module updates
         if isinstance(module, TabModule) and property_name == 'tabs':
             self.canvas_panel._refresh_tab_module(module)
