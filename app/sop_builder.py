@@ -784,7 +784,7 @@ class SOPBuilderApp:
             elif response:  # Yes
                 self.save_project()
 
-        # Close live preview if active
+        # Close live preview if active (this will stop WebSocket server)
         if hasattr(self, 'preview_manager'):
             self.preview_manager.close_preview()
 
