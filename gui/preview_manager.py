@@ -263,7 +263,7 @@ class DocumentPreviewManager:
         if hasattr(self.app.main_window, 'menu_frame'):
             for widget in self.app.main_window.menu_frame.winfo_children():
                 if (isinstance(widget, ctk.CTkButton) and
-                        "Live Preview" in widget.cget("text")):
+                        ("Live Preview" in widget.cget("text") or "Close Preview" in widget.cget("text"))):
 
                     if is_open:
                         widget.configure(
