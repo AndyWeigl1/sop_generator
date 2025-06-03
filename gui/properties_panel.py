@@ -499,6 +499,12 @@ class PropertiesPanel:
         fields_frame = ctk.CTkFrame(item_frame, fg_color="transparent")
         fields_frame.pack(fill="x", padx=10, pady=(0, 10))
 
+        # Header field
+        ctk.CTkLabel(fields_frame, text="Header:", font=("Arial", 11)).pack(anchor="w", pady=(5, 2))
+        header_entry = ctk.CTkEntry(fields_frame, height=32, font=("Arial", 11))
+        header_entry.pack(fill="x", pady=(0, 5))
+        header_entry.insert(0, item.get('header', f'Media {index + 1}'))
+
         # Source field
         ctk.CTkLabel(fields_frame, text="Source:", font=("Arial", 11)).pack(anchor="w", pady=(5, 2))
         source_frame = ctk.CTkFrame(fields_frame, fg_color="transparent")
@@ -524,6 +530,8 @@ class PropertiesPanel:
         caption_entry.insert(0, item.get('caption', ''))
 
         # Bind change events
+        header_entry.bind("<KeyRelease>",
+                          lambda e: self._update_media_item(index, 'header', header_entry.get(), field_name))
         source_entry.bind("<KeyRelease>",
                           lambda e: self._update_media_item(index, 'source', source_entry.get(), field_name))
         caption_entry.bind("<KeyRelease>",
@@ -535,7 +543,8 @@ class PropertiesPanel:
             'type': 'image',
             'source': '',
             'caption': f'Image {len(self._media_items) + 1}',
-            'alt_text': ''
+            'alt_text': '',
+            'header': f'Media {len(self._media_items) + 1}'
         }
         self._media_items.append(new_item)
         self._refresh_media_items(container, field_name)
