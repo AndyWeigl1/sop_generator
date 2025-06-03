@@ -1,22 +1,24 @@
-# utils/preview_server.py
+# utils/preview_server.py - ENHANCED to serve user-selected files
 import asyncio
 import json
 import threading
 import time
 from pathlib import Path
-from typing import Set, Optional
+from typing import Set, Optional, Dict
 import webbrowser
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import websockets
 import socket
 import logging
+import urllib.parse
+import mimetypes
 
 # Suppress websockets logging to reduce noise
 logging.getLogger('websockets').setLevel(logging.WARNING)
 
 
 class LivePreviewServer:
-    """WebSocket-based live preview server for SOP Builder"""
+    """WebSocket-based live preview server for SOP Builder with user file support"""
 
     def __init__(self, http_port: int = 8080, ws_port: int = 8765):
         self.http_port = http_port
@@ -30,6 +32,32 @@ class LivePreviewServer:
         self.ws_loop = None
         self.is_running = False
 
+        # NEW: Track user-selected files and their original paths
+        self.user_file_mappings: Dict[str, str] = {}  # filename -> original_path
+
+    def register_user_file(self, original_path: str) -> str:
+        """
+        Register a user-selected file and return the HTTP URL to access it
+
+        Args:
+            original_path: The original file path selected by the user
+
+        Returns:
+            HTTP URL that can be used to access the file through the preview server
+        """
+        if not original_path or not Path(original_path).exists():
+            return original_path  # Return as-is if invalid
+
+        # Get the filename
+        filename = Path(original_path).name
+
+        # Store the mapping
+        self.user_file_mappings[filename] = original_path
+
+        # Return the HTTP URL
+        http_url = f"http://localhost:{self.http_port}/user-files/{filename}"
+        print(f"📎 Registered user file: {filename} -> {http_url}")
+        return http_url
 
     def start_server(self) -> bool:
         """Start both HTTP and WebSocket servers"""
@@ -68,6 +96,9 @@ class LivePreviewServer:
         """Stop both servers"""
         print("🛑 Stopping preview server...")
         self.is_running = False
+
+        # Clear user file mappings
+        self.user_file_mappings.clear()
 
         # Stop HTTP server
         if self.http_server:
@@ -146,11 +177,58 @@ class LivePreviewServer:
                     html_content = self.server_instance.current_html or "<html><body><h1>Preview Loading...</h1></body></html>"
                     self.wfile.write(html_content.encode('utf-8'))
 
+                elif self.path.startswith('/user-files/'):
+                    # NEW: Serve user-selected files
+                    self._serve_user_file()
+
                 elif self.path.startswith('/Assets/') or self.path.startswith('/assets/'):
                     # Serve asset files
                     self._serve_asset_file()
                 else:
                     self.send_error(404, "File not found")
+
+            def _serve_user_file(self):
+                """Serve user-selected files from their original locations"""
+                try:
+                    # Extract filename from path like /user-files/image.jpg
+                    filename = self.path.split('/user-files/')[-1]
+                    filename = urllib.parse.unquote(filename)
+
+                    # Look up the original path
+                    original_path = self.server_instance.user_file_mappings.get(filename)
+
+                    if not original_path:
+                        print(f"❌ User file not found in mappings: {filename}")
+                        self.send_error(404, f"User file not found: {filename}")
+                        return
+
+                    file_path = Path(original_path)
+
+                    if not file_path.exists():
+                        print(f"❌ User file no longer exists: {original_path}")
+                        self.send_error(404, f"User file no longer exists: {filename}")
+                        return
+
+                    # Determine content type
+                    content_type, _ = mimetypes.guess_type(str(file_path))
+                    if not content_type:
+                        content_type = 'application/octet-stream'
+
+                    # Send file
+                    self.send_response(200)
+                    self.send_header('Content-type', content_type)
+                    self.send_header('Content-Length', str(file_path.stat().st_size))
+                    self.send_header('Cache-Control', 'public, max-age=3600')  # Cache for 1 hour
+                    self.end_headers()
+
+                    with open(file_path, 'rb') as f:
+                        self.wfile.write(f.read())
+
+                    print(f"📎 Served user file: {filename} from {original_path}")
+
+                except Exception as e:
+                    print(f"❌ Error serving user file {self.path}: {e}")
+                    self.send_error(500, f"Error serving user file: {str(e)}")
 
             def _serve_asset_file(self):
                 """Serve asset files from the assets directory"""
@@ -246,32 +324,6 @@ class LivePreviewServer:
             finally:
                 self.websocket_clients.discard(websocket)
                 print(f"🔌 WebSocket client disconnected")
-
-        async def run_server():
-            try:
-                print(f"   🔌 WebSocket server starting on port {self.ws_port}")
-                self.ws_server = await websockets.serve(
-                    handle_client,
-                    'localhost',
-                    self.ws_port,
-                    ping_interval=20,  # Send ping every 20 seconds
-                    ping_timeout=10  # Wait 10 seconds for pong
-                )
-                print(f"   🔌 WebSocket server listening on port {self.ws_port}")
-                await self.ws_server.wait_closed()
-            except Exception as e:
-                print(f"❌ WebSocket Server error: {e}")
-
-        # Create new event loop for this thread
-        try:
-            self.ws_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self.ws_loop)
-            self.ws_loop.run_until_complete(run_server())
-        except Exception as e:
-            print(f"❌ Failed to start WebSocket server: {e}")
-        finally:
-            if self.ws_loop:
-                self.ws_loop.close()
 
         async def run_server():
             try:
