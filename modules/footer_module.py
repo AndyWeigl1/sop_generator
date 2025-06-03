@@ -26,7 +26,11 @@ class FooterModule(Module):
 
         background_image = self.content_data.get('background_image', '')
         if background_image and background_image.strip():
-            media_refs.append(background_image)
+            cleaned_path = background_image.strip()
+
+            # Skip if already a URI/URL
+            if not cleaned_path.startswith(('file://', 'data:', 'http')):
+                media_refs.append(cleaned_path)
 
         return media_refs
 
@@ -34,8 +38,19 @@ class FooterModule(Module):
         """Update all media paths using the provided mapping"""
         background_image = self.content_data.get('background_image', '')
 
-        if background_image and background_image in path_mapping:
-            self.content_data['background_image'] = path_mapping[background_image]
+        if background_image and background_image.strip():
+            # Skip if already a URI/URL
+            if background_image.startswith(('file://', 'data:', 'http')):
+                return
+
+            # Find matching path using multiple strategies
+            new_path = self._find_matching_path_in_mapping(background_image, path_mapping)
+
+            if new_path:
+                print(f"   ✅ Updated background_image: {background_image} -> {new_path[:50]}...")
+                self.content_data['background_image'] = new_path
+            else:
+                print(f"   ❌ No mapping found for background_image: {background_image}")
 
     def render_to_html(self) -> str:
         """Generate HTML for footer"""
