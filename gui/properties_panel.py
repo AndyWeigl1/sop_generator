@@ -1,4 +1,4 @@
-# gui/properties_panel.py
+# gui/properties_panel.py - Updated with preview updates for tab operations
 import customtkinter as ctk
 from typing import Dict, Optional, Any, Tuple, List
 from modules.base_module import Module
@@ -10,7 +10,7 @@ import json
 
 
 class PropertiesPanel:
-    """Redesigned panel for editing module properties with better usability"""
+    """Redesigned panel for editing module properties with better usability and event-driven preview updates"""
 
     def __init__(self, parent, app_instance):
         self.parent = parent
@@ -690,6 +690,8 @@ class PropertiesPanel:
             tab_module.add_tab(tab_name)
             self.app.canvas_panel._refresh_tab_module(tab_module)
             self.app.set_modified(True)
+            # Trigger preview update for new tab
+            self.app.preview_manager.request_preview_update()
             # Refresh properties to show the new tab
             self.show_module_properties(tab_module)
 
@@ -728,6 +730,8 @@ class PropertiesPanel:
                     self.app.canvas_panel.add_module_widget(new_module)
 
                 self.app.set_modified(True)
+                # Trigger preview update for duplicated module
+                self.app.preview_manager.request_preview_update()
                 messagebox.showinfo("Success", "Module duplicated successfully!")
 
             except Exception as e:
@@ -1042,6 +1046,8 @@ class PropertiesPanel:
             tab_module.rename_tab(tab_name, new_name)
             self.app.canvas_panel._refresh_tab_module(tab_module)
             self.app.set_modified(True)
+            # Trigger preview update for renamed tab
+            self.app.preview_manager.request_preview_update()
             # Refresh the properties panel with the new tab name
             self.show_tab_properties(tab_module, new_name)
         elif new_name == tab_name:
@@ -1075,5 +1081,7 @@ class PropertiesPanel:
             tab_module.remove_tab(tab_name)
             self.app.canvas_panel._refresh_tab_module(tab_module)
             self.app.set_modified(True)
+            # Trigger preview update for deleted tab
+            self.app.preview_manager.request_preview_update()
             # Clear properties panel
             self.clear()
