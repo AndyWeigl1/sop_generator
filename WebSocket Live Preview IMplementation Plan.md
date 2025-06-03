@@ -42,26 +42,6 @@ Replace the current file-based auto-refresh preview system with a WebSocket-base
 
 *COMPLETE!*
 
-## Benefits
-
-### Performance Benefits
-- ✅ **Instant Updates**: Changes appear immediately, no 4-second delay
-- ✅ **Efficient**: Only updates when document actually changes
-- ✅ **Reduced CPU**: No continuous file writing/reading
-- ✅ **Better Memory**: No temporary file accumulation
-
-### User Experience Benefits
-- ✅ **Smooth Updates**: No page refresh flicker
-- ✅ **Scroll Preservation**: Browser maintains scroll position
-- ✅ **Connection Status**: Visual feedback on connection state
-- ✅ **Responsive**: Near real-time updates during editing
-
-### Technical Benefits
-- ✅ **Robust**: Automatic reconnection on connection loss
-- ✅ **Backwards Compatible**: Falls back to file method if WebSocket fails
-- ✅ **Scalable**: Can handle multiple browser windows
-- ✅ **Extensible**: Easy to add new update types
-
 ## Error Handling
 
 ### Port Conflicts
