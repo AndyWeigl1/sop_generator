@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Optional, List
 import time
 import tkinter as tk
+from utils.preview_server import LivePreviewServer
 
 
 class DocumentPreviewManager:
@@ -26,9 +27,14 @@ class DocumentPreviewManager:
         self.temp_html_path: Optional[Path] = None
         self.auto_refresh_enabled = False
         self.last_update_time = 0
-        self.update_debounce_delay = 1.0  # seconds (reduced from 1.5)
+        self.update_debounce_delay = 0.5  # Reduced for WebSocket
         self.pending_update_timer: Optional[threading.Timer] = None
         self.update_lock = threading.Lock()
+        self.server_lock = threading.Lock()  # For WebSocket server operations
+
+        # NEW: WebSocket server
+        self.preview_server = LivePreviewServer()
+        self.use_websocket = True  # Preference flag
 
     def toggle_live_preview(self):
         """Toggle the live preview window on/off"""
@@ -38,33 +44,73 @@ class DocumentPreviewManager:
             self.open_preview()
 
     def open_preview(self):
-        """Open live preview in external browser"""
+        """Open live preview using WebSocket server or fallback to file method"""
         try:
-            # Generate initial HTML
-            self._generate_preview_html()
+            if self.use_websocket:
+                # Try WebSocket method first
+                if self._open_websocket_preview():
+                    return
+                else:
+                    print("⚠️ WebSocket preview failed, falling back to file method")
+                    self.use_websocket = False
 
-            # Open in browser
-            if self.temp_html_path and self.temp_html_path.exists():
-                webbrowser.open(f"file://{self.temp_html_path.absolute()}")
-
-                # Enable auto-refresh
-                self.auto_refresh_enabled = True
-                self.app.main_window.set_status("Live preview opened - event-driven updates enabled", "green")
-
-                # Update the button text to show it can be toggled off
-                if hasattr(self.app.main_window, 'menu_frame'):
-                    for widget in self.app.main_window.menu_frame.winfo_children():
-                        if (isinstance(widget, ctk.CTkButton) and
-                            widget.cget("text") == "👁️ Live Preview"):
-                            widget.configure(text="👁️ Close Preview", fg_color="red", hover_color="darkred")
-                            break
-
-            else:
-                self.app.main_window.set_status("Failed to generate preview", "red")
+            # Fallback to original file-based method
+            self._open_file_preview()
 
         except Exception as e:
             print(f"Error opening preview: {e}")
             self.app.main_window.set_status("Error opening preview", "red")
+
+    def _open_websocket_preview(self) -> bool:
+        """Open preview using WebSocket server"""
+        try:
+            # Start the server
+            if not self.preview_server.start_server():
+                return False
+
+            # Generate initial HTML with WebSocket client
+            html_content = self._generate_websocket_html()
+            self.preview_server.update_content(html_content)
+
+            # Open browser to server URL
+            server_url = self.preview_server.get_server_url()
+            webbrowser.open(server_url)
+
+            # Enable auto-refresh
+            self.auto_refresh_enabled = True
+            self.app.main_window.set_status(
+                f"Live preview opened at {server_url} - WebSocket updates enabled",
+                "green"
+            )
+
+            # Update button
+            self._update_preview_button(True)
+            return True
+
+        except Exception as e:
+            print(f"WebSocket preview error: {e}")
+            return False
+
+    def _open_file_preview(self):
+        """Original file-based preview method (fallback)"""
+        # Generate initial HTML
+        self._generate_preview_html()
+
+        # Open in browser
+        if self.temp_html_path and self.temp_html_path.exists():
+            webbrowser.open(f"file://{self.temp_html_path.absolute()}")
+
+            # Enable auto-refresh
+            self.auto_refresh_enabled = True
+            self.app.main_window.set_status(
+                "Live preview opened - file-based auto-refresh",
+                "orange"
+            )
+
+            # Update button
+            self._update_preview_button(True)
+        else:
+            self.app.main_window.set_status("Failed to generate preview", "red")
 
     def close_preview(self):
         """Close live preview and cleanup"""
@@ -76,6 +122,10 @@ class DocumentPreviewManager:
                 self.pending_update_timer.cancel()
                 self.pending_update_timer = None
 
+        # Stop WebSocket server if running
+        if self.preview_server.is_running:
+            self.preview_server.stop_server()
+
         # Clean up temp file
         if self.temp_html_path and self.temp_html_path.exists():
             try:
@@ -83,15 +133,236 @@ class DocumentPreviewManager:
             except:
                 pass
 
-        # Update button text back to original
+        # Update button
+        self._update_preview_button(False)
+        self.app.main_window.set_status("Live preview closed", "gray")
+
+    def _generate_websocket_html(self) -> str:
+        """Generate HTML with embedded WebSocket client"""
+        # Generate base HTML using HTTP URLs for assets instead of file URIs
+        html_content = self.app.html_generator.generate_html(
+            self.app.active_modules,
+            title="SOP Live Preview",
+            embed_theme=True,  # Embed CSS but convert asset URLs
+            embed_media=False,  # Don't embed media, use HTTP URLs
+            embed_css_assets=False,  # Don't embed CSS assets, use HTTP URLs
+            output_dir=None
+        )
+
+        # Convert file URIs to HTTP URLs for the preview server
+        html_content = self._convert_file_uris_to_http_urls(html_content)
+
+        # Inject WebSocket client
+        websocket_script = self._get_websocket_client_script()
+
+        # Insert before closing </body> tag
+        html_content = html_content.replace(
+            '</body>',
+            f'{websocket_script}\n</body>'
+        )
+
+        return html_content
+
+    def _convert_file_uris_to_http_urls(self, html_content: str) -> str:
+        """Convert file:// URIs to HTTP URLs for the preview server"""
+        import re
+
+        def replace_file_uri(match):
+            file_uri = match.group(1)
+            if file_uri.startswith('file:///'):
+                # Extract the filename from the file URI
+                import urllib.parse
+                from pathlib import Path
+
+                try:
+                    # Decode the file URI to get the actual path
+                    decoded_path = urllib.parse.unquote(file_uri)
+                    file_path = Path(decoded_path.replace('file:///', ''))
+                    filename = file_path.name
+
+                    # Convert to HTTP URL served by our server
+                    http_url = f"http://localhost:{self.preview_server.http_port}/assets/{filename}"
+                    print(f"🔗 Converted: {filename} -> HTTP URL")
+                    return f'"{http_url}"'
+                except Exception as e:
+                    print(f"⚠️ Failed to convert file URI: {file_uri} - {e}")
+                    return match.group(0)
+
+            return match.group(0)
+
+        # Replace file:// URIs in src, href, and url() attributes
+        patterns = [
+            r'"(file://[^"]+)"',  # src="file://..." and href="file://..."
+            r"'(file://[^']+)'",  # src='file://...' and href='file://...'
+            r'url\((file://[^)]+)\)',  # url(file://...)
+        ]
+
+        for pattern in patterns:
+            html_content = re.sub(pattern, replace_file_uri, html_content)
+
+        return html_content
+
+    def _update_preview_button(self, is_open: bool):
+        """Update the preview button text and color"""
         if hasattr(self.app.main_window, 'menu_frame'):
             for widget in self.app.main_window.menu_frame.winfo_children():
                 if (isinstance(widget, ctk.CTkButton) and
-                    widget.cget("text") == "👁️ Close Preview"):
-                    widget.configure(text="👁️ Live Preview", fg_color="purple", hover_color="darkmagenta")
+                        "Live Preview" in widget.cget("text")):
+
+                    if is_open:
+                        widget.configure(
+                            text="👁️ Close Preview",
+                            fg_color="red",
+                            hover_color="darkred"
+                        )
+                    else:
+                        widget.configure(
+                            text="👁️ Live Preview",
+                            fg_color="purple",
+                            hover_color="darkmagenta"
+                        )
                     break
 
-        self.app.main_window.set_status("Live preview closed", "gray")
+    def _get_websocket_client_script(self) -> str:
+        """Get the WebSocket client JavaScript"""
+        ws_port = self.preview_server.ws_port
+
+        return f'''
+    <script>
+    // WebSocket Live Preview Client
+    (function() {{
+        const wsUrl = 'ws://localhost:{ws_port}';
+        let ws = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 10;
+
+        function connectWebSocket() {{
+            try {{
+                ws = new WebSocket(wsUrl);
+
+                ws.onopen = function() {{
+                    console.log('🔌 WebSocket connected to preview server');
+                    reconnectAttempts = 0;
+                    showConnectionStatus('Connected', 'green');
+                }};
+
+                ws.onmessage = function(event) {{
+                    try {{
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'content_update') {{
+                            console.log('🔄 Received content update');
+                            showUpdateNotification();
+                            // Smooth reload
+                            window.location.reload();
+                        }}
+                    }} catch (e) {{
+                        console.error('Error parsing WebSocket message:', e);
+                    }}
+                }};
+
+                ws.onclose = function(event) {{
+                    console.log('🔌 WebSocket disconnected');
+                    showConnectionStatus('Disconnected', 'orange');
+
+                    // Attempt to reconnect
+                    if (reconnectAttempts < maxReconnectAttempts) {{
+                        reconnectAttempts++;
+                        const delay = Math.min(1000 * reconnectAttempts, 5000);
+                        console.log(`🔄 Reconnecting in ${{delay}}ms (attempt ${{reconnectAttempts}})`);
+                        setTimeout(connectWebSocket, delay);
+                    }} else {{
+                        showConnectionStatus('Failed to reconnect', 'red');
+                    }}
+                }};
+
+                ws.onerror = function(error) {{
+                    console.error('WebSocket error:', error);
+                    showConnectionStatus('Connection error', 'red');
+                }};
+
+            }} catch (e) {{
+                console.error('Failed to create WebSocket connection:', e);
+            }}
+        }}
+
+        function showConnectionStatus(message, color) {{
+            // Create or update status indicator
+            let statusEl = document.getElementById('ws-status');
+            if (!statusEl) {{
+                statusEl = document.createElement('div');
+                statusEl.id = 'ws-status';
+                statusEl.style.cssText = `
+                    position: fixed;
+                    top: 10px;
+                    right: 10px;
+                    background: rgba(0,0,0,0.8);
+                    color: white;
+                    padding: 8px 12px;
+                    border-radius: 4px;
+                    font-size: 12px;
+                    z-index: 10000;
+                    transition: all 0.3s ease;
+                `;
+                document.body.appendChild(statusEl);
+            }}
+
+            statusEl.textContent = `🔌 ${{message}}`;
+            statusEl.style.borderLeft = `4px solid ${{color}}`;
+
+            // Hide after 3 seconds if connected
+            if (color === 'green') {{
+                setTimeout(() => {{
+                    if (statusEl) statusEl.style.opacity = '0.3';
+                }}, 3000);
+            }}
+        }}
+
+        function showUpdateNotification() {{
+            // Brief flash to indicate update
+            const flash = document.createElement('div');
+            flash.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 3px;
+                background: linear-gradient(90deg, #4CAF50, #2196F3);
+                z-index: 10001;
+                animation: slideIn 0.3s ease-out;
+            `;
+
+            // Add CSS animation
+            if (!document.getElementById('update-animation-style')) {{
+                const style = document.createElement('style');
+                style.id = 'update-animation-style';
+                style.textContent = `
+                    @keyframes slideIn {{
+                        0% {{ transform: translateX(-100%); }}
+                        100% {{ transform: translateX(0); }}
+                    }}
+                `;
+                document.head.appendChild(style);
+            }}
+
+            document.body.appendChild(flash);
+            setTimeout(() => flash.remove(), 300);
+        }}
+
+        // Start connection when page loads
+        if (document.readyState === 'loading') {{
+            document.addEventListener('DOMContentLoaded', connectWebSocket);
+        }} else {{
+            connectWebSocket();
+        }}
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {{
+            if (ws) {{
+                ws.close();
+            }}
+        }});
+    }})();
+    </script>'''
 
     def _generate_preview_html(self):
         """Generate HTML for preview using file paths instead of base64 embedding"""
@@ -114,7 +385,7 @@ class DocumentPreviewManager:
             # Add auto-refresh meta tag with longer interval since we're doing event-driven updates
             auto_refresh_html = html_content.replace(
                 '<head>',
-                '<head>\n    <meta http-equiv="refresh" content="5">'  # Increased from 2 to 5 seconds
+                '<head>\n    <meta http-equiv="refresh" content="4">'  # Increased from 2 to 5 seconds
             )
 
             # Write to temp file
@@ -129,27 +400,51 @@ class DocumentPreviewManager:
             return False
 
     def request_preview_update(self):
-        """
-        Request a preview update (called when document changes)
-        Now uses debounced event-driven updates instead of polling
-        """
+        """Request preview update with WebSocket support"""
         if not self.auto_refresh_enabled:
             return
 
-        with self.update_lock:
-            # Cancel any existing pending update
-            if self.pending_update_timer:
-                self.pending_update_timer.cancel()
+        if self.preview_server.is_running:
+            # WebSocket method - faster updates
+            with self.update_lock:
+                # Cancel any existing pending update
+                if self.pending_update_timer:
+                    self.pending_update_timer.cancel()
 
-            # Schedule a new update after the debounce delay
-            self.pending_update_timer = threading.Timer(
-                self.update_debounce_delay,
-                self._perform_preview_update
-            )
-            self.pending_update_timer.daemon = True
-            self.pending_update_timer.start()
+                # Schedule update with shorter debounce
+                self.pending_update_timer = threading.Timer(
+                    0.3,  # Shorter delay for WebSocket
+                    self._perform_websocket_update
+                )
+                self.pending_update_timer.daemon = True
+                self.pending_update_timer.start()
+        else:
+            # File-based method - original implementation
+            with self.update_lock:
+                if self.pending_update_timer:
+                    self.pending_update_timer.cancel()
 
-            print(f"Preview update scheduled (debounce: {self.update_debounce_delay}s)")
+                self.pending_update_timer = threading.Timer(
+                    self.update_debounce_delay,
+                    self._perform_preview_update
+                )
+                self.pending_update_timer.daemon = True
+                self.pending_update_timer.start()
+
+    def _perform_websocket_update(self):
+        """Perform WebSocket-based preview update"""
+        try:
+            with self.update_lock:
+                self.pending_update_timer = None
+
+            if self.auto_refresh_enabled and self.preview_server.is_running:
+                html_content = self._generate_websocket_html()
+                self.preview_server.update_content(html_content)
+                self.last_update_time = time.time()
+                print("✅ WebSocket preview updated")
+
+        except Exception as e:
+            print(f"❌ Error updating WebSocket preview: {e}")
 
     def _perform_preview_update(self):
         """Perform the actual preview update (called by timer)"""
