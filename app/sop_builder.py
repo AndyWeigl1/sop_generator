@@ -1,4 +1,4 @@
-# app/sop_builder.py - Enhanced with library drag and drop integration
+# app/sop_builder.py - Enhanced with event-driven preview updates
 import customtkinter as ctk
 from typing import List, Optional, Dict, Tuple
 from modules.base_module import Module
@@ -17,7 +17,7 @@ from gui.preview_manager import DocumentPreviewManager
 
 
 class SOPBuilderApp:
-    """Main application class for SOP Builder with enhanced drag and drop support"""
+    """Main application class for SOP Builder with event-driven preview updates"""
 
     def __init__(self):
         self.root = ctk.CTk()
@@ -46,7 +46,6 @@ class SOPBuilderApp:
         self._populate_module_library()
         self._setup_enhanced_drag_drop()
         self._setup_enhanced_preview()
-
 
     def _setup_enhanced_drag_drop(self):
         """Set up enhanced drag and drop integration between library and canvas"""
@@ -189,6 +188,9 @@ class SOPBuilderApp:
             # Update status to show enhanced functionality
             self.main_window.set_status("Ready - Drag modules from left panel to canvas", "green")
 
+            # Trigger preview update for the initial template
+            self.preview_manager.request_preview_update()
+
         except Exception as e:
             messagebox.showerror("Error", f"Failed to create base template: {str(e)}")
 
@@ -216,6 +218,7 @@ class SOPBuilderApp:
                     self.main_window.set_status(f"Added {module.display_name} to '{tab_name}' tab", "green")
                 else:
                     messagebox.showerror("Error", f"Failed to add module to tab '{tab_name}'")
+                    return
             else:
                 # Add to main canvas (existing behavior)
                 module.position = len(self.active_modules)
@@ -226,8 +229,9 @@ class SOPBuilderApp:
                 # Update status with success message
                 self.main_window.set_status(f"Added {module.display_name} to main canvas", "green")
 
-            # Mark as modified
+            # Mark as modified and trigger preview update
             self.set_modified(True)
+            self.preview_manager.request_preview_update()
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to add module: {str(e)}")
@@ -260,6 +264,9 @@ class SOPBuilderApp:
 
     def remove_module(self, module_id: str):
         """Remove a module from the SOP (from main canvas or from a tab)"""
+        removed_something = False
+        removed_display_name = ""
+
         # First check if it's in a tab
         for module_iter in self.active_modules:
             if isinstance(module_iter, TabModule):
@@ -268,36 +275,42 @@ class SOPBuilderApp:
                     # Remove from tab
                     removed_module = module_iter.remove_module_from_tab(tab_name, module_id)
                     if removed_module:
+                        removed_display_name = removed_module.display_name
                         self.canvas_panel.remove_module_from_tab_widget(module_iter, tab_name, module_id)
                         # Clear selection if this was selected
                         if self.selected_module and self.selected_module.id == module_id:
                             self.selected_module = None
                             self.properties_panel.clear()
-                        self.set_modified(True)
-                        self.main_window.set_status(f"Removed {removed_module.display_name}", "orange")
-                        return
+                        removed_something = True
+                        break
 
         # If not in a tab, check main canvas
-        module_to_remove = None
-        for module_iter_main in self.active_modules:
-            if module_iter_main.id == module_id:
-                module_to_remove = module_iter_main
-                break
+        if not removed_something:
+            module_to_remove = None
+            for module_iter_main in self.active_modules:
+                if module_iter_main.id == module_id:
+                    module_to_remove = module_iter_main
+                    break
 
-        if module_to_remove:
-            self.active_modules.remove(module_to_remove)
-            self.canvas_panel.remove_module_widget(module_id)
+            if module_to_remove:
+                removed_display_name = module_to_remove.display_name
+                self.active_modules.remove(module_to_remove)
+                self.canvas_panel.remove_module_widget(module_id)
 
-            # Clear selection if this module was selected
-            if self.selected_module == module_to_remove:
-                self.selected_module = None
-                self.selected_tab_context = None
-                self.properties_panel.clear()
+                # Clear selection if this module was selected
+                if self.selected_module == module_to_remove:
+                    self.selected_module = None
+                    self.selected_tab_context = None
+                    self.properties_panel.clear()
 
-            # Update positions
-            self._update_module_positions()
+                # Update positions
+                self._update_module_positions()
+                removed_something = True
+
+        if removed_something:
             self.set_modified(True)
-            self.main_window.set_status(f"Removed {module_to_remove.display_name}", "orange")
+            self.preview_manager.request_preview_update()  # Trigger preview update
+            self.main_window.set_status(f"Removed {removed_display_name}", "orange")
 
     def move_module_to_tab(self, module: Module, target_tab: TabModule, tab_name: str):
         """Move a module from main canvas to a tab (enhanced with better feedback)"""
@@ -311,6 +324,7 @@ class SOPBuilderApp:
                 self.canvas_panel.add_module_to_tab_widget(target_tab, tab_name, module)
                 self._update_module_positions()
                 self.set_modified(True)
+                self.preview_manager.request_preview_update()  # Trigger preview update
                 self.main_window.set_status(f"Moved {module.display_name} to '{tab_name}' tab", "green")
                 return True
         return False
@@ -328,6 +342,7 @@ class SOPBuilderApp:
 
             self._update_module_positions()
             self.set_modified(True)
+            self.preview_manager.request_preview_update()  # Trigger preview update
             self.main_window.set_status(f"Moved {module.display_name} to main canvas", "green")
             return True
         return False
@@ -379,6 +394,7 @@ class SOPBuilderApp:
             # Refresh canvas
             self.canvas_panel.refresh_order()
             self.set_modified(True)
+            self.preview_manager.request_preview_update()  # Trigger preview update
 
     def _update_module_positions(self):
         """Update position values for all modules"""
@@ -438,6 +454,9 @@ class SOPBuilderApp:
         # Update status for blank project
         self.main_window.set_status("Blank project - Drag modules from left panel to start building", "blue")
 
+        # Trigger preview update for blank project
+        self.preview_manager.request_preview_update()
+
     def open_project(self, filename_str=None):
         """Open an existing project with tab hierarchy"""
         if not filename_str:
@@ -466,6 +485,9 @@ class SOPBuilderApp:
                 self.set_modified(False)
                 self.root.title(f"SOP Builder - {self.current_project_path.name}")
                 self.main_window.set_status(f"Opened {self.current_project_path.name}", "green")
+
+                # Trigger preview update for opened project
+                self.preview_manager.request_preview_update()
 
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to open project: {str(e)}")
@@ -731,8 +753,7 @@ class SOPBuilderApp:
         self.canvas_panel.update_module_preview(module)
 
         # Update live preview if enabled
-        if hasattr(self, 'preview_manager'):
-            self.preview_manager.request_preview_update()
+        self.preview_manager.request_preview_update()
 
         # Handle special tab module updates
         if isinstance(module, TabModule) and property_name == 'tabs':
@@ -763,12 +784,15 @@ class SOPBuilderApp:
             elif response:  # Yes
                 self.save_project()
 
+        # Close live preview if active
+        if hasattr(self, 'preview_manager'):
+            self.preview_manager.close_preview()
+
         self.root.destroy()
 
 
+# Keep the existing ExportDialog class unchanged
 class ExportDialog:
-    """Enhanced dialog for export options including media embedding"""
-
     """Enhanced dialog for export options including media embedding"""
 
     def __init__(self, parent, available_themes: List[str], modules: List):
