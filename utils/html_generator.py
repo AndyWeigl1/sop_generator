@@ -353,7 +353,7 @@ class HTMLGenerator:
     # Update the _generate_html_content method
     def _generate_html_content(self, modules: List[Module], title: str,
                                output_dir: Optional[Path], embed_theme: bool,
-                               embed_css_assets: bool = False) -> str:  # ADD THE NEW PARAMETER
+                               embed_css_assets: bool = False) -> str:
         """
         Generate the HTML content from processed modules
 
@@ -441,20 +441,16 @@ class HTMLGenerator:
             theme_css_content = self._load_theme_css(embed_assets=embed_css_assets)
             theme_css_ref = ""
             custom_styles = f"<style>\n{theme_css_content}\n</style>"
-        else:  # Not embed_theme (This will be true for live preview)
+        else:  # Not embed_theme
             if output_dir:  # For normal export
                 self._copy_theme_to_output(output_dir)
                 theme_css_ref = f"{self.theme_name}.css"
-            else:  # NEW: For live preview (output_dir is None)
-                # Resolve the theme CSS path to an absolute file URI
-                # self.themes_dir is Path("assets/themes")
-                theme_css_file_path = (self.themes_dir / f"{self.theme_name}.css").resolve()
-                if theme_css_file_path.exists():
-                    theme_css_ref = theme_css_file_path.as_uri()  # file:///...
-                else:
-                    theme_css_ref = f"{self.theme_name}.css"  # Fallback, will likely be broken
-                    print(f"⚠️ Live preview: Theme CSS not found at {theme_css_file_path}")
-            custom_styles = ""
+                custom_styles = ""
+            else:  # For live preview (output_dir is None)
+                # For live preview, we need to process CSS assets
+                theme_css_content = self._load_theme_css_for_live_preview()
+                custom_styles = f"<style>\n{theme_css_content}\n</style>"
+                theme_css_ref = ""
 
         # Generate JavaScript
         scripts = self._generate_scripts()
@@ -472,6 +468,22 @@ class HTMLGenerator:
         )
 
         return html
+
+    def _load_theme_css_for_live_preview(self) -> str:
+        """Load CSS content and convert asset references to file URIs for live preview"""
+        theme_path = self.themes_dir / f"{self.theme_name}.css"
+
+        if not theme_path.exists():
+            return self._generate_default_styles()
+
+        with open(theme_path, 'r', encoding='utf-8') as f:
+            css_content = f.read()
+
+        # Process CSS asset references for live preview
+        print("🎨 Processing CSS assets for live preview...")
+        css_content = self._convert_css_assets_to_file_uris(css_content, theme_path)
+
+        return css_content
 
     def _load_theme_css(self, embed_assets: bool = False) -> str:
         """Load CSS content from theme file and optionally embed assets"""
@@ -492,6 +504,77 @@ class HTMLGenerator:
             css_content = css_embedder.embed_css_assets(css_content, theme_path)
 
         return css_content
+
+    def _convert_css_assets_to_file_uris(self, css_content: str, css_file_path: Path) -> str:
+        """
+        Convert CSS asset references to file URIs for live preview
+
+        Args:
+            css_content: CSS file content
+            css_file_path: Path to the CSS file
+
+        Returns:
+            Updated CSS content with file URI references
+        """
+        import re
+
+        # Find all url() references in CSS
+        url_pattern = r'url\([\'"]?([^\'")]+)[\'"]?\)'
+
+        def replace_url(match):
+            asset_path = match.group(1)
+
+            # Skip data URLs that are already embedded
+            if asset_path.startswith('data:'):
+                return match.group(0)
+
+            # Skip external URLs
+            if asset_path.startswith(('http://', 'https://', '//')):
+                return match.group(0)
+
+            # Skip if already a file URI
+            if asset_path.startswith('file://'):
+                return match.group(0)
+
+            # Resolve asset path
+            try:
+                # Try multiple possible locations
+                possible_paths = [
+                    Path.cwd() / asset_path,  # From current directory
+                    Path.cwd() / "assets" / Path(asset_path).name,  # In assets folder
+                ]
+
+                resolved_path = None
+                for possible_path in possible_paths:
+                    if possible_path.exists():
+                        resolved_path = possible_path.resolve()
+                        break
+
+                if not resolved_path:
+                    # Try case-insensitive search in assets folder
+                    assets_folder = Path.cwd() / "assets"
+                    if assets_folder.exists():
+                        target_name = Path(asset_path).name.lower()
+                        for asset_file in assets_folder.iterdir():
+                            if asset_file.is_file() and asset_file.name.lower() == target_name:
+                                resolved_path = asset_file.resolve()
+                                break
+
+                if resolved_path and resolved_path.exists():
+                    file_uri = resolved_path.as_uri()
+                    print(f"   📄 CSS Asset: {Path(asset_path).name} -> file URI")
+                    return f'url({file_uri})'
+                else:
+                    print(f"   ⚠️ CSS Asset not found: {asset_path}")
+                    return match.group(0)
+
+            except Exception as e:
+                print(f"   ❌ Error processing CSS asset {asset_path}: {e}")
+                return match.group(0)
+
+        # Replace all url() references
+        updated_css = re.sub(url_pattern, replace_url, css_content)
+        return updated_css
 
     def _render_tab_module_with_cards(self, tab_module: 'TabModule') -> str:
         """Generate HTML for TabModule with proper card structure"""
