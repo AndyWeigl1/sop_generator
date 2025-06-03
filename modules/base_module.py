@@ -1,7 +1,8 @@
-# modules/base_module.py
+# modules/base_module.py - Updated for better live preview path handling
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List
 import uuid
+import os
 
 
 class Module(ABC):
@@ -63,7 +64,7 @@ class Module(ABC):
         Modules with media content should override this method.
 
         Args:
-            path_mapping: Dictionary mapping original file paths to new paths (usually base64 data URLs)
+            path_mapping: Dictionary mapping original file paths to new paths (usually base64 data URLs or file URIs)
         """
         pass
 
@@ -78,6 +79,37 @@ class Module(ABC):
             List of media file paths (empty by default)
         """
         return []
+
+    def _find_matching_path_in_mapping(self, file_path: str, path_mapping: Dict[str, str]) -> Optional[str]:
+        """
+        Find a matching path in the mapping, trying multiple strategies
+
+        Args:
+            file_path: Original file path to find
+            path_mapping: Available path mappings
+
+        Returns:
+            Mapped value if found, None otherwise
+        """
+        if not file_path or not path_mapping:
+            return None
+
+        # Strategy 1: Exact match
+        if file_path in path_mapping:
+            return path_mapping[file_path]
+
+        # Strategy 2: Try with normalized slashes
+        normalized_path = file_path.replace('\\', '/')
+        if normalized_path in path_mapping:
+            return path_mapping[normalized_path]
+
+        # Strategy 3: Try case-insensitive match for the filename part
+        file_name = os.path.basename(file_path).lower()
+        for mapping_key, mapping_value in path_mapping.items():
+            if os.path.basename(mapping_key).lower() == file_name:
+                return mapping_value
+
+        return None
 
     def update_content(self, key: str, value: Any):
         """Update specific content field"""
