@@ -129,40 +129,79 @@ class HTMLGenerator:
             else:  # NEW: This is for Live Preview (embed_media is False AND output_dir is None)
                 print("🔧 Adjusting media paths for live preview (using absolute file URIs)...")
                 path_mapping_for_preview = {}
-                # Get unique, non-base64 media references from all modules
+
+                # Get unique media references from all modules
                 media_references_from_modules = self.module_updater.get_all_media_references(working_modules)
 
                 for original_path_str in media_references_from_modules:
-                    if self.module_updater._is_base64_data(original_path_str):  # Skip already embedded data
+                    # Skip empty paths
+                    if not original_path_str or not original_path_str.strip():
+                        continue
+
+                    # Skip if it's already a data URL or file URI
+                    if (original_path_str.startswith('data:') or
+                            original_path_str.startswith('file://') or
+                            original_path_str.startswith('http')):
                         continue
 
                     try:
-                        # Assume original_path_str is relative to project root (where assets/ folder is)
-                        # or an absolute path the user provided.
+                        # Handle relative paths properly
                         path_obj = Path(original_path_str)
+
+                        # If it's relative, resolve it from the current working directory
                         if not path_obj.is_absolute():
-                            # If your script's CWD is the project root:
-                            path_obj = Path.cwd() / path_obj
+                            # Try multiple possible locations for assets
+                            possible_paths = [
+                                Path.cwd() / original_path_str,  # From current directory
+                                Path.cwd() / "assets" / Path(original_path_str).name,  # In assets folder
+                                Path(original_path_str)  # As-is
+                            ]
 
-                        resolved_path = path_obj.resolve()
+                            resolved_path = None
+                            for possible_path in possible_paths:
+                                try:
+                                    if possible_path.exists():
+                                        resolved_path = possible_path.resolve()
+                                        break
+                                except:
+                                    continue
 
-                        if resolved_path.exists():
-                            path_mapping_for_preview[original_path_str] = resolved_path.as_uri()  # file:///...
+                            if not resolved_path:
+                                # Try case-insensitive search in assets folder
+                                assets_folder = Path.cwd() / "assets"
+                                if assets_folder.exists():
+                                    target_name = Path(original_path_str).name.lower()
+                                    for asset_file in assets_folder.iterdir():
+                                        if asset_file.is_file() and asset_file.name.lower() == target_name:
+                                            resolved_path = asset_file.resolve()
+                                            break
+
+                            if not resolved_path:
+                                print(f"⚠️ Live preview: File not found: {original_path_str}")
+                                continue
                         else:
-                            path_mapping_for_preview[
-                                original_path_str] = original_path_str  # Keep original if not found
-                            print(
-                                f"⚠️ Live preview: Could not resolve media path: {original_path_str} (tried {resolved_path})")
+                            resolved_path = path_obj.resolve()
+
+                        if resolved_path and resolved_path.exists():
+                            # Convert to file URI for browser access
+                            file_uri = resolved_path.as_uri()
+                            path_mapping_for_preview[original_path_str] = file_uri
+                            print(f"   📄 Mapped: {Path(original_path_str).name} -> file URI")
+                        else:
+                            print(f"⚠️ Live preview: File not found: {original_path_str}")
+
                     except Exception as e:
                         print(f"⚠️ Error resolving path for live preview '{original_path_str}': {e}")
-                        path_mapping_for_preview[original_path_str] = original_path_str  # Fallback
 
                 if path_mapping_for_preview:
+                    print(f"🔄 Updating {len(path_mapping_for_preview)} media references for live preview")
                     self.module_updater.update_all_media_references(working_modules, path_mapping_for_preview)
+                else:
+                    print("ℹ️ No media files found to process for live preview")
 
             # Step 3: Generate HTML content from processed modules
             html_content = self._generate_html_content(
-                working_modules, title, output_dir, embed_theme, embed_css_assets  # PASS THE NEW PARAMETER
+                working_modules, title, output_dir, embed_theme, embed_css_assets
             )
 
             print("✅ HTML generation completed successfully")
