@@ -85,14 +85,9 @@ class SOPBuilderApp:
         self.main_window.open_btn.configure(command=self.open_project)
         self.main_window.save_btn.configure(command=self.save_project)
         self.main_window.export_btn.configure(command=self.export_to_html)
-        self.main_window.preview_toggle.configure(command=self.toggle_preview)
 
     def _setup_enhanced_preview(self):
         """Setup enhanced preview functionality"""
-        # Replace the broken preview toggle with working functionality
-        original_command = self.main_window.preview_toggle.cget("command")
-        self.main_window.preview_toggle.configure(command=self.toggle_canvas_preview_mode)
-
         # Add live preview button to menu
         live_preview_btn = ctk.CTkButton(
             self.main_window.menu_frame,
@@ -106,19 +101,6 @@ class SOPBuilderApp:
         )
         # Insert before export button
         live_preview_btn.pack(side="left", padx=8, before=self.main_window.export_btn)
-
-    def toggle_canvas_preview_mode(self):
-        """Toggle canvas preview mode (fixed version)"""
-        preview_mode = self.main_window.preview_toggle.get()
-
-        if preview_mode:
-            # Enter preview mode - simplify view
-            self.canvas_panel.set_preview_mode(True)
-            self.main_window.set_status("Canvas Preview Mode - editing disabled", "orange")
-        else:
-            # Exit preview mode - restore editing
-            self.canvas_panel.set_preview_mode(False)
-            self.main_window.set_status("Edit mode - drag modules from left panel to canvas", "green")
 
     def _setup_base_template(self):
         """Create the base SOP template with Header, Tab Section (with content), and Footer"""
@@ -724,16 +706,6 @@ class SOPBuilderApp:
             print(f"Embedding media: {current}/{total} - {Path(current_file).name}")
 
         return progress_callback
-
-    def toggle_preview(self):
-        """Toggle between edit and preview modes"""
-        preview_mode = self.main_window.preview_toggle.get()
-        self.canvas_panel.set_preview_mode(preview_mode)
-
-        if preview_mode:
-            self.main_window.set_status("Preview mode - drag and drop disabled", "orange")
-        else:
-            self.main_window.set_status("Edit mode - drag modules from left panel to canvas", "green")
 
     def set_modified(self, modified: bool):
         """Set the modified state of the project"""
