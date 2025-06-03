@@ -7,7 +7,6 @@ from tkinter import filedialog, messagebox
 from gui.components.text_formatting_toolbar import TextFormattingToolbar
 import os
 import json
-from gui.preview_manager import ModulePreviewPanel
 
 
 class PropertiesPanel:
@@ -20,17 +19,17 @@ class PropertiesPanel:
         self.current_parent_tab: Optional[Tuple['TabModule', str]] = None
         self.property_widgets: Dict[str, ctk.CTkBaseClass] = {}
 
-        # Create main scrollable frame
+        # Create main container that will hold both scroll frame and preview
+        self.main_container = ctk.CTkFrame(parent, fg_color="transparent")
+        self.main_container.pack(fill="both", expand=True)
+
+        # Create main scrollable frame for properties
         self.scroll_frame = ctk.CTkScrollableFrame(
-            parent,
+            self.main_container,
             fg_color=("gray95", "gray10"),
             corner_radius=0
         )
         self.scroll_frame.pack(fill="both", expand=True)
-
-        # ADD THIS LINE HERE (after scroll_frame is created):
-        from gui.preview_manager import ModulePreviewPanel
-        self.module_preview = ModulePreviewPanel(self.scroll_frame, app_instance)
 
         # Show empty state initially
         self._show_empty_state()
@@ -68,8 +67,6 @@ class PropertiesPanel:
         self.current_module = None
         self.current_parent_tab = None
         # Hide module preview
-        if hasattr(self, 'module_preview'):
-            self.module_preview.hide_preview()
 
     def show_module_properties(self, module: Module, parent_tab: Optional[Tuple['TabModule', str]] = None):
         """Display properties for the selected module with improved layout"""
@@ -86,9 +83,6 @@ class PropertiesPanel:
 
         # Properties Section
         self._create_properties_section(main_container, module)
-
-        # Add module preview at the end
-        self.module_preview.show_module_preview(module)
 
     def _create_header_section(self, parent, module: Module, parent_tab: Optional[Tuple['TabModule', str]] = None):
         """Create the header section with module info and controls"""
