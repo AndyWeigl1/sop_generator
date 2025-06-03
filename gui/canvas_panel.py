@@ -1,4 +1,4 @@
-# gui/canvas_panel.py - Streamlined with tab widget management extracted
+# gui/canvas_panel.py - Updated with event-driven preview updates
 import customtkinter as ctk
 from typing import Dict, Optional, Tuple, Any
 from modules.base_module import Module
@@ -11,7 +11,7 @@ import tkinter as tk
 
 
 class CanvasPanel:
-    """Central panel for arranging modules with enhanced drag and drop support"""
+    """Central panel for arranging modules with enhanced drag and drop support and event-driven preview updates"""
 
     def __init__(self, parent, app_instance):
         self.parent = parent
@@ -82,11 +82,13 @@ class CanvasPanel:
             self.widgets_being_destroyed.add(id(widget))
 
             # Clear any selection
-            if hasattr(self.module_widget_manager, 'selected_widget') and self.module_widget_manager.selected_widget == widget:
+            if hasattr(self.module_widget_manager,
+                       'selected_widget') and self.module_widget_manager.selected_widget == widget:
                 self.module_widget_manager.selected_widget = None
 
             # Clear library drop highlighting if this widget is highlighted
-            if hasattr(self.library_drag_drop_handler, 'library_drop_highlight') and self.library_drag_drop_handler.library_drop_highlight == widget:
+            if hasattr(self.library_drag_drop_handler,
+                       'library_drop_highlight') and self.library_drag_drop_handler.library_drop_highlight == widget:
                 self.library_drag_drop_handler.library_drop_highlight = None
 
             # Unbind all events recursively
@@ -176,9 +178,17 @@ class CanvasPanel:
         self.tab_widget_manager.clear_all_tab_widgets()
         self.widgets_being_destroyed.clear()
 
+        # Trigger preview update for cleared canvas
+        if hasattr(self.app, 'preview_manager'):
+            self.app.preview_manager.request_preview_update()
+
     def refresh_order(self):
         """Refresh the visual order of modules - delegate to module widget manager"""
         self.module_widget_manager.refresh_widget_order()
+
+        # Trigger preview update for reordered modules
+        if hasattr(self.app, 'preview_manager'):
+            self.app.preview_manager.request_preview_update()
 
     def update_module_preview(self, module: Module):
         """Update the preview for a specific module - delegate to module widget manager"""
@@ -250,6 +260,8 @@ class CanvasPanel:
 
     def _move_module_up(self, module: Module, parent_tab: Optional[Tuple[TabModule, str]] = None):
         """Move module up in its context (main canvas or within a tab)"""
+        moved = False
+
         if parent_tab:
             # Module is in a tab - move within that tab
             tab_module, tab_name = parent_tab
@@ -265,12 +277,19 @@ class CanvasPanel:
                     tab_module.reorder_module_in_tab(tab_name, module.id, current_index - 1)
                     self.tab_widget_manager.refresh_tab_content(tab_module, tab_name)
                     self.app.set_modified(True)
+                    moved = True
         else:
             # Module is on main canvas
-            self._move_module(module.id, -1)
+            moved = self._move_module(module.id, -1)
+
+        # Trigger preview update if module was moved
+        if moved and hasattr(self.app, 'preview_manager'):
+            self.app.preview_manager.request_preview_update()
 
     def _move_module_down(self, module: Module, parent_tab: Optional[Tuple[TabModule, str]] = None):
         """Move module down in its context (main canvas or within a tab)"""
+        moved = False
+
         if parent_tab:
             # Module is in a tab - move within that tab
             tab_module, tab_name = parent_tab
@@ -286,19 +305,32 @@ class CanvasPanel:
                     tab_module.reorder_module_in_tab(tab_name, module.id, current_index + 1)
                     self.tab_widget_manager.refresh_tab_content(tab_module, tab_name)
                     self.app.set_modified(True)
+                    moved = True
         else:
             # Module is on main canvas
-            self._move_module(module.id, 1)
+            moved = self._move_module(module.id, 1)
+
+        # Trigger preview update if module was moved
+        if moved and hasattr(self.app, 'preview_manager'):
+            self.app.preview_manager.request_preview_update()
 
     def _refresh_tab_module(self, tab_module: TabModule):
         """Refresh the entire tab module widget - delegate to tab widget manager"""
         self.tab_widget_manager.refresh_tab_module(tab_module)
 
+        # Trigger preview update for refreshed tab module
+        if hasattr(self.app, 'preview_manager'):
+            self.app.preview_manager.request_preview_update()
+
     def _switch_active_tab(self, tab_module: TabModule, tab_name: str):
         """Switch the visible tab content - delegate to tab widget manager"""
         self.tab_widget_manager.switch_active_tab(tab_module, tab_name)
 
-    def _move_module(self, module_id: str, direction: int):
+        # Trigger preview update for tab switch
+        if hasattr(self.app, 'preview_manager'):
+            self.app.preview_manager.request_preview_update()
+
+    def _move_module(self, module_id: str, direction: int) -> bool:
         """Move module up or down on main canvas"""
         module_index = None
         for i, module in enumerate(self.app.active_modules):
@@ -310,6 +342,8 @@ class CanvasPanel:
             new_index = module_index + direction
             if 0 <= new_index < len(self.app.active_modules):
                 self.app.reorder_modules(module_id, new_index)
+                return True
+        return False
 
     # Provide property access to tab_widgets for backward compatibility
     @property
