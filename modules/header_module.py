@@ -15,7 +15,7 @@ class HeaderModule(Module):
             'title': 'Standard Operating Procedure',
             'subtitle': 'Process Name',
             'date': 'Last Updated: MM/DD/YYYY',
-            'logo_path': None,
+            'logo_path': 'assets/kodiak.png',
             'document_label': 'Standard Operating Procedure'
         }
 
@@ -77,6 +77,6 @@ class HeaderModule(Module):
             'title': 'text',
             'subtitle': 'text',
             'date': 'text',
-            'logo_path': 'file',
+            # 'logo_path': 'file',
             'document_label': 'text'
         }
