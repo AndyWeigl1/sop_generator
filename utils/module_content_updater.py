@@ -1,4 +1,4 @@
-# utils/module_content_updater.py
+# utils/module_content_updater.py - FIXED
 """
 Module Content Updater
 
@@ -47,7 +47,7 @@ class ModuleContentUpdater:
 
         Args:
             modules: List of modules to update
-            path_mapping: Dictionary mapping original paths to base64 data URLs
+            path_mapping: Dictionary mapping original paths to base64 data URLs or file URIs
 
         Returns:
             Updated modules list
@@ -65,7 +65,7 @@ class ModuleContentUpdater:
 
         Args:
             module: Module to update
-            path_mapping: Path to base64 URL mapping
+            path_mapping: Path to data URL/file URI mapping
         """
         # Debug: Log the module and its media references before update
         if hasattr(module, 'get_media_references'):
@@ -73,13 +73,16 @@ class ModuleContentUpdater:
             if original_refs:
                 print(f"📝 Updating {module.module_type} module:")
                 for ref in original_refs:
-                    normalized_ref = self._normalize_path_for_lookup(ref)
-                    is_in_mapping = normalized_ref in path_mapping
-                    print(f"   Original: {ref}")
-                    print(f"   Normalized: {normalized_ref}")
-                    print(f"   In mapping: {is_in_mapping}")
-                    if not is_in_mapping:
-                        # Show available mapping keys for debugging
+                    # Skip if already a file URI or data URL
+                    if ref.startswith(('file://', 'data:', 'http')):
+                        print(f"   ⚠️ SKIPPING: '{ref[:50]}...' is already a URI/URL")
+                        continue
+
+                    # Check direct mapping first (exact match)
+                    if ref in path_mapping:
+                        print(f"   ✅ DIRECT MATCH: '{ref}' found in mapping")
+                    else:
+                        print(f"   ❌ NO MATCH: '{ref}' not found in mapping")
                         print(f"   Available keys: {list(path_mapping.keys())[:3]}...")
 
         # Update the module's own media references
@@ -90,25 +93,50 @@ class ModuleContentUpdater:
         if isinstance(module, TabModule):
             self._update_tab_module_media(module, path_mapping)
 
+    def _is_base64_data(self, data_string: str) -> bool:
+        """
+        Check if a string appears to be base64 data rather than a file path
+
+        Args:
+            data_string: String to check
+
+        Returns:
+            True if it appears to be base64 data
+        """
+        if not data_string or not isinstance(data_string, str):
+            return False
+
+        # Check for data URL format
+        if data_string.startswith('data:'):
+            return True
+
+        # Check for short strings with base64 characters
+        if len(data_string) < 20 and any(c in data_string for c in '=+/'):
+            # Additional check: base64 strings are typically longer than 4 characters
+            # and "2Q==" is definitely base64 (it decodes to "h")
+            return True
+
+        # Check if it looks like pure base64 (no file path characteristics)
+        if (len(data_string) > 10 and
+                not any(char in data_string for char in r'\/.:') and  # No path separators or extensions
+                data_string.replace('=', '').replace('+', '').replace('/', '').isalnum()):
+            return True
+
+        return False
+
     def _normalize_path_for_lookup(self, file_path: str) -> str:
         """
-        Normalize file path for mapping lookup (should match MediaDiscoveryService logic)
+        Normalize file path for mapping lookup - simplified for live preview
         """
         if not file_path:
             return ''
 
-        # Remove quotes and extra whitespace
-        cleaned_path = file_path.strip().strip('"\'')
+        # Don't normalize URIs that are already converted
+        if file_path.startswith(('file://', 'data:', 'http')):
+            return file_path
 
-        # Convert to Path object for normalization
-        from pathlib import Path
-        path_obj = Path(cleaned_path)
-
-        # Return absolute path if it exists, otherwise return as-is
-        if path_obj.exists():
-            return str(path_obj.resolve())
-        else:
-            return cleaned_path
+        # For live preview, use exact path matching to avoid issues
+        return file_path.strip().strip('"\'')
 
     def _update_tab_module_media(self, tab_module: TabModule, path_mapping: Dict[str, str]):
         """
@@ -155,7 +183,7 @@ class ModuleContentUpdater:
             modules: List of modules to scan
 
         Returns:
-            Set of unique media file paths
+            Set of unique media file paths (excluding base64 data)
         """
         all_media = set()
 
@@ -168,22 +196,26 @@ class ModuleContentUpdater:
                 print(f"   Found media ref: '{media_ref}' (type: {type(media_ref)})")
 
                 # Check for suspicious references
-                if len(media_ref) < 10 and any(c in media_ref for c in '=+/'):
-                    print(f"   ⚠️ SUSPICIOUS: This looks like base64 data, not a file path!")
+                if self._is_base64_data(media_ref):
+                    print(f"   ⚠️ SKIPPING: This looks like base64 data, not a file path!")
                     print(f"   ⚠️ Module content_data: {module.content_data}")
+                    continue  # Skip base64 data
 
             all_media.update(module_media)
 
-        print(f"📊 Total unique media references found: {len(all_media)}")
-        for ref in all_media:
+        # Filter out any base64 data that might have slipped through
+        filtered_media = {ref for ref in all_media if not self._is_base64_data(ref)}
+
+        print(f"📊 Total unique media references found: {len(filtered_media)}")
+        for ref in filtered_media:
             print(f"   - '{ref}'")
 
-        return all_media
+        return filtered_media
 
     def _get_module_media_references(self, module: Module) -> Set[str]:
         """
         Get all media references from a single module
-        Enhanced with debugging
+        Enhanced with debugging and better filtering
         """
         media_refs = set()
 
@@ -196,6 +228,12 @@ class ModuleContentUpdater:
                 for ref in module_refs:
                     if ref and ref.strip():
                         cleaned_ref = ref.strip()
+
+                        # Skip if it's already a URI or data URL
+                        if cleaned_ref.startswith(('file://', 'data:', 'http')):
+                            print(f"   Skipping URI/URL: '{cleaned_ref[:50]}...'")
+                            continue
+
                         print(f"   Adding reference: '{cleaned_ref}'")
                         media_refs.add(cleaned_ref)
                     else:
@@ -218,7 +256,7 @@ class ModuleContentUpdater:
                                path_mapping: Dict[str, str]) -> Dict[str, List[str]]:
         """
         Validate that all media references in modules have corresponding mappings
-        Enhanced with better debugging information
+        Enhanced with better debugging information and base64 filtering
 
         Args:
             modules: Modules to validate
@@ -234,6 +272,10 @@ class ModuleContentUpdater:
         debug_info = []
 
         for media_path in all_media:
+            # Skip base64 data
+            if self._is_base64_data(media_path):
+                continue
+
             normalized_path = self._normalize_path_for_lookup(media_path)
 
             if normalized_path in path_mapping:
