@@ -306,14 +306,12 @@ body {
 }
 
 .media-container {
-    margin: 2rem 0;
+    max-width: var(--media-max-width, 800px);
+    margin: 2rem auto;  /* This is the key change - sets top/bottom to 2rem and left/right to auto */
     border-radius: 4px;
     overflow: hidden;
     border: 1px solid var(--kodiak-brown);
     background: var(--kodiak-brown);
-    max-width: var(--media-max-width, 800px);
-    margin-left: auto;
-    margin-right: auto;
 }
 
 .media-header {
@@ -375,6 +373,8 @@ body {
     height: 100%;
     display: flex;
     flex-direction: column;
+    border: 1px solid rgba(74, 56, 40, 0.3) !important;
+    border-radius: 4px;
 }
 
 .media-grid .media-content {
@@ -556,7 +556,7 @@ body {
 }
 
 .step-card .media-container {
-    margin: 1rem auto;
+    margin: 1rem auto; /* Changed '0' to 'auto' */
 }
 
 .step-card .table-module {
@@ -567,7 +567,7 @@ body {
     margin: 0;
 }
 
-/* FIXED: Remove border from issue cards inside step cards */
+/* UPDATED: Adjust padding to compensate for removed border */
 .step-card .issue-card {
     border: none !important;
     border-radius: 0 !important;
