@@ -106,20 +106,19 @@ class ModuleContentUpdater:
         if not data_string or not isinstance(data_string, str):
             return False
 
-        # Check for data URL format
+        # Check for data URL format (most reliable indicator)
         if data_string.startswith('data:'):
             return True
 
-        # Check for short strings with base64 characters
-        if len(data_string) < 20 and any(c in data_string for c in '=+/'):
-            # Additional check: base64 strings are typically longer than 4 characters
-            # and "2Q==" is definitely base64 (it decodes to "h")
-            return True
+        # If it has obvious file path characteristics, it's NOT base64
+        if any(char in data_string for char in ['/', '\\', '.png', '.jpg', '.jpeg', '.gif', '.mp4', '.webm']):
+            return False
 
-        # Check if it looks like pure base64 (no file path characteristics)
-        if (len(data_string) > 10 and
+        # Check if it looks like pure base64 (no path separators, very long, base64 characters)
+        if (len(data_string) > 100 and  # Base64 data is typically much longer
                 not any(char in data_string for char in r'\/.:') and  # No path separators or extensions
-                data_string.replace('=', '').replace('+', '').replace('/', '').isalnum()):
+                data_string.replace('=', '').replace('+', '').replace('/', '').isalnum() and
+                len(data_string) % 4 == 0):  # Base64 length is typically multiple of 4
             return True
 
         return False
