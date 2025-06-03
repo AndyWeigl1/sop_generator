@@ -22,13 +22,15 @@ class MediaGridModule(Module):
                     'type': 'image',
                     'source': '',
                     'caption': 'Image 1',
-                    'alt_text': ''
+                    'alt_text': '',
+                    'header': 'Media Example'
                 },
                 {
                     'type': 'image',
                     'source': '',
                     'caption': 'Image 2',
-                    'alt_text': ''
+                    'alt_text': '',
+                    'header': 'Media Example'
                 }
             ],
             'gap': 'medium',  # 'small', 'medium', 'large'
@@ -135,10 +137,17 @@ class MediaGridModule(Module):
         gap_class = f'gap-{self.content_data.get("gap", "medium")}'
 
         # Generate media items
+        # Generate media items
         items_html = ''
-        for item in self.content_data.get('items', []):
+        for i, item in enumerate(self.content_data.get('items', [])):
             # Normalize the file path
             source = self._normalize_file_path(item.get('source', ''))
+
+            # Determine header text - use a generic header if not specified
+            header_text = item.get('header', f'Media {i + 1}')
+
+            # Add proper CSS class for media type
+            media_class = 'video' if item['type'] == 'video' else 'image'
 
             if item['type'] == 'image':
                 click_handler = 'onclick="openImageModal(this)"' if self.content_data.get('clickable') else ''
@@ -162,12 +171,16 @@ class MediaGridModule(Module):
             if item.get('caption'):
                 click_instruction = ''
                 if self.content_data.get('clickable') and item['type'] == 'image':
-                    click_instruction = '<br><span style="color: var(--kodiak-red, #e74c3c); font-size: 0.9em;">(Click image to view full size)</span>'
+                    click_instruction = '<span style="color: var(--kodiak-red, #e74c3c); font-size: 0.9em;">(Click image to view full size)</span>'
 
-                caption_html = f'<div class="media-caption">{item["caption"]}{click_instruction}</div>'
+                caption_html = f'''<div class="media-caption">
+                    {item["caption"]}
+                    {click_instruction}
+                </div>'''
 
             items_html += f'''
             <div class="media-container">
+                <div class="media-header {media_class}">{header_text}</div>
                 <div class="media-content">
                     {media_html}
                 </div>
