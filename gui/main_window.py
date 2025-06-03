@@ -259,7 +259,7 @@ class MainWindow:
         self.canvas_frame = ctk.CTkFrame(self.paned_window.left_frame, fg_color="gray10")
         self.canvas_frame.pack(fill="both", expand=True)
 
-        # Canvas header
+        # Canvas header (simplified - no preview toggle)
         canvas_header_frame = ctk.CTkFrame(self.canvas_frame, height=50, fg_color="gray15")
         canvas_header_frame.pack(fill="x", padx=8, pady=(8, 0))
         canvas_header_frame.pack_propagate(False)
@@ -270,14 +270,6 @@ class MainWindow:
             font=("Arial", 16, "bold")
         )
         canvas_title.pack(side="left", padx=15, pady=12)
-
-        # Preview toggle with better styling
-        self.preview_toggle = ctk.CTkSwitch(
-            canvas_header_frame,
-            text="👁️ Preview Mode",
-            font=("Arial", 12)
-        )
-        self.preview_toggle.pack(side="right", padx=15, pady=12)
 
         # Canvas workspace (scrollable)
         self.canvas = ctk.CTkScrollableFrame(
