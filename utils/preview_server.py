@@ -30,6 +30,7 @@ class LivePreviewServer:
         self.ws_loop = None
         self.is_running = False
 
+
     def start_server(self) -> bool:
         """Start both HTTP and WebSocket servers"""
         try:
@@ -123,6 +124,9 @@ class LivePreviewServer:
 
     def _start_http_server(self):
         """Start the HTTP server"""
+        import mimetypes
+        import urllib.parse
+        import os
 
         class PreviewHandler(SimpleHTTPRequestHandler):
             def __init__(self, server_instance, *args, **kwargs):
@@ -131,6 +135,7 @@ class LivePreviewServer:
 
             def do_GET(self):
                 if self.path == '/' or self.path == '/index.html':
+                    # Serve the main HTML content
                     self.send_response(200)
                     self.send_header('Content-type', 'text/html; charset=utf-8')
                     self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
@@ -140,12 +145,72 @@ class LivePreviewServer:
 
                     html_content = self.server_instance.current_html or "<html><body><h1>Preview Loading...</h1></body></html>"
                     self.wfile.write(html_content.encode('utf-8'))
+
+                elif self.path.startswith('/Assets/') or self.path.startswith('/assets/'):
+                    # Serve asset files
+                    self._serve_asset_file()
                 else:
                     self.send_error(404, "File not found")
 
+            def _serve_asset_file(self):
+                """Serve asset files from the assets directory"""
+                try:
+                    # Clean the path and remove leading slash
+                    clean_path = urllib.parse.unquote(self.path.lstrip('/'))
+
+                    # Try multiple possible asset locations
+                    possible_paths = [
+                        Path.cwd() / clean_path,  # ./assets/file.ext
+                        Path.cwd() / clean_path.lower(),  # ./assets/file.ext (lowercase)
+                        Path.cwd() / "assets" / Path(clean_path).name,  # ./assets/filename only
+                        Path.cwd() / "assets" / Path(clean_path).name.lower(),  # ./assets/filename (lowercase)
+                    ]
+
+                    asset_path = None
+                    for possible_path in possible_paths:
+                        if possible_path.exists() and possible_path.is_file():
+                            asset_path = possible_path
+                            break
+
+                    if not asset_path:
+                        # Try case-insensitive search in assets folder
+                        assets_folder = Path.cwd() / "assets"
+                        if assets_folder.exists():
+                            target_name = Path(clean_path).name.lower()
+                            for asset_file in assets_folder.iterdir():
+                                if asset_file.is_file() and asset_file.name.lower() == target_name:
+                                    asset_path = asset_file
+                                    break
+
+                    if asset_path and asset_path.exists():
+                        # Determine content type
+                        content_type, _ = mimetypes.guess_type(str(asset_path))
+                        if not content_type:
+                            content_type = 'application/octet-stream'
+
+                        # Send file
+                        self.send_response(200)
+                        self.send_header('Content-type', content_type)
+                        self.send_header('Content-Length', str(asset_path.stat().st_size))
+                        self.send_header('Cache-Control', 'public, max-age=3600')  # Cache for 1 hour
+                        self.end_headers()
+
+                        with open(asset_path, 'rb') as f:
+                            self.wfile.write(f.read())
+
+                        print(f"📁 Served asset: {clean_path} -> {asset_path.name}")
+                    else:
+                        print(f"❌ Asset not found: {clean_path}")
+                        self.send_error(404, f"Asset not found: {clean_path}")
+
+                except Exception as e:
+                    print(f"❌ Error serving asset {self.path}: {e}")
+                    self.send_error(500, f"Error serving asset: {str(e)}")
+
             def log_message(self, format, *args):
-                # Suppress HTTP server logs to reduce noise
-                pass
+                # Suppress HTTP server logs to reduce noise, except for errors
+                if "Error" in format or "404" in format:
+                    print(f"🌐 HTTP: {format % args}")
 
         # Create handler with server instance reference
         def handler_factory(*args, **kwargs):
@@ -161,14 +226,15 @@ class LivePreviewServer:
     def _start_websocket_server(self):
         """Start the WebSocket server"""
 
-        async def handle_client(websocket, path):
+        async def handle_client(websocket, path=None):  # ← Make path optional
             print(f"🔌 WebSocket client connected from {websocket.remote_address}")
             self.websocket_clients.add(websocket)
             try:
                 # Send initial connection confirmation
                 await websocket.send(json.dumps({
                     'type': 'connection_confirmed',
-                    'timestamp': time.time()
+                    'timestamp': time.time(),
+                    'path': path or getattr(websocket, 'path', '/')
                 }))
 
                 # Wait for the connection to close
@@ -180,6 +246,32 @@ class LivePreviewServer:
             finally:
                 self.websocket_clients.discard(websocket)
                 print(f"🔌 WebSocket client disconnected")
+
+        async def run_server():
+            try:
+                print(f"   🔌 WebSocket server starting on port {self.ws_port}")
+                self.ws_server = await websockets.serve(
+                    handle_client,
+                    'localhost',
+                    self.ws_port,
+                    ping_interval=20,  # Send ping every 20 seconds
+                    ping_timeout=10  # Wait 10 seconds for pong
+                )
+                print(f"   🔌 WebSocket server listening on port {self.ws_port}")
+                await self.ws_server.wait_closed()
+            except Exception as e:
+                print(f"❌ WebSocket Server error: {e}")
+
+        # Create new event loop for this thread
+        try:
+            self.ws_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.ws_loop)
+            self.ws_loop.run_until_complete(run_server())
+        except Exception as e:
+            print(f"❌ Failed to start WebSocket server: {e}")
+        finally:
+            if self.ws_loop:
+                self.ws_loop.close()
 
         async def run_server():
             try:
