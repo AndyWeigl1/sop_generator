@@ -123,10 +123,42 @@ class HTMLGenerator:
             if embed_media:
                 print("🔄 Starting media embedding process...")
                 working_modules = self._embed_all_media(working_modules, progress_callback)
-            elif output_dir:
-                # Traditional file copying
+            elif output_dir:  # This is for normal export with copied assets
                 print("📁 Copying media files to Assets folder...")
                 self._copy_media_files(working_modules, output_dir)
+            else:  # NEW: This is for Live Preview (embed_media is False AND output_dir is None)
+                print("🔧 Adjusting media paths for live preview (using absolute file URIs)...")
+                path_mapping_for_preview = {}
+                # Get unique, non-base64 media references from all modules
+                media_references_from_modules = self.module_updater.get_all_media_references(working_modules)
+
+                for original_path_str in media_references_from_modules:
+                    if self.module_updater._is_base64_data(original_path_str):  # Skip already embedded data
+                        continue
+
+                    try:
+                        # Assume original_path_str is relative to project root (where assets/ folder is)
+                        # or an absolute path the user provided.
+                        path_obj = Path(original_path_str)
+                        if not path_obj.is_absolute():
+                            # If your script's CWD is the project root:
+                            path_obj = Path.cwd() / path_obj
+
+                        resolved_path = path_obj.resolve()
+
+                        if resolved_path.exists():
+                            path_mapping_for_preview[original_path_str] = resolved_path.as_uri()  # file:///...
+                        else:
+                            path_mapping_for_preview[
+                                original_path_str] = original_path_str  # Keep original if not found
+                            print(
+                                f"⚠️ Live preview: Could not resolve media path: {original_path_str} (tried {resolved_path})")
+                    except Exception as e:
+                        print(f"⚠️ Error resolving path for live preview '{original_path_str}': {e}")
+                        path_mapping_for_preview[original_path_str] = original_path_str  # Fallback
+
+                if path_mapping_for_preview:
+                    self.module_updater.update_all_media_references(working_modules, path_mapping_for_preview)
 
             # Step 3: Generate HTML content from processed modules
             html_content = self._generate_html_content(
@@ -366,19 +398,23 @@ class HTMLGenerator:
 
         # Handle theme CSS
         if embed_theme:
-            # Read and embed the CSS file content with assets
-            theme_css_content = self._load_theme_css(embed_assets=embed_css_assets)  # PASS THE PARAMETER
+            # Current logic for embedding theme (embed_css_assets will be False for live preview from the call)
+            theme_css_content = self._load_theme_css(embed_assets=embed_css_assets)
             theme_css_ref = ""
             custom_styles = f"<style>\n{theme_css_content}\n</style>"
-        else:
-            # Link to external CSS file
-            if output_dir:
-                # Copy theme CSS to output directory
+        else:  # Not embed_theme (This will be true for live preview)
+            if output_dir:  # For normal export
                 self._copy_theme_to_output(output_dir)
                 theme_css_ref = f"{self.theme_name}.css"
-            else:
-                # Use relative path to themes directory
-                theme_css_ref = f"assets/themes/{self.theme_name}.css"
+            else:  # NEW: For live preview (output_dir is None)
+                # Resolve the theme CSS path to an absolute file URI
+                # self.themes_dir is Path("assets/themes")
+                theme_css_file_path = (self.themes_dir / f"{self.theme_name}.css").resolve()
+                if theme_css_file_path.exists():
+                    theme_css_ref = theme_css_file_path.as_uri()  # file:///...
+                else:
+                    theme_css_ref = f"{self.theme_name}.css"  # Fallback, will likely be broken
+                    print(f"⚠️ Live preview: Theme CSS not found at {theme_css_file_path}")
             custom_styles = ""
 
         # Generate JavaScript
