@@ -110,19 +110,51 @@ class LivePreviewServer:
                 print(f"   ⚠️ Error stopping HTTP server: {e}")
 
         # Stop WebSocket server and close connections
-        if self.ws_loop and self.websocket_clients:
+        if self.ws_loop:
             try:
-                # Schedule cleanup in the WebSocket event loop
+                # Schedule cleanup and server shutdown in the WebSocket event loop
                 future = asyncio.run_coroutine_threadsafe(
-                    self._cleanup_websockets(),
+                    self._cleanup_and_shutdown_websockets(),
                     self.ws_loop
                 )
-                future.result(timeout=2.0)  # Wait up to 2 seconds
-                print("   ✅ WebSocket connections closed")
+                future.result(timeout=3.0)  # Wait up to 3 seconds
+                print("   ✅ WebSocket server stopped")
             except Exception as e:
-                print(f"   ⚠️ Error closing WebSocket connections: {e}")
+                print(f"   ⚠️ Error stopping WebSocket server: {e}")
 
         self.websocket_clients.clear()
+
+    async def _cleanup_and_shutdown_websockets(self):
+        """Async method to properly close all WebSocket connections and stop the server"""
+        # First, close all existing connections
+        if self.websocket_clients:
+            tasks = []
+            for client in self.websocket_clients.copy():
+                try:
+                    # Send goodbye message
+                    await client.send(json.dumps({
+                        'type': 'server_shutdown',
+                        'timestamp': time.time()
+                    }))
+                    # Close the connection
+                    tasks.append(client.close())
+                except Exception:
+                    pass  # Client might already be disconnected
+
+            # Wait for all connections to close
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+
+        self.websocket_clients.clear()
+
+        # Now stop the WebSocket server itself
+        if self.ws_server:
+            try:
+                self.ws_server.close()
+                await self.ws_server.wait_closed()
+                self.ws_server = None
+            except Exception as e:
+                print(f"   ⚠️ Error closing WebSocket server: {e}")
 
     def update_content(self, html_content: str):
         """Update cached content and broadcast to clients"""
@@ -304,7 +336,16 @@ class LivePreviewServer:
     def _start_websocket_server(self):
         """Start the WebSocket server"""
 
-        async def handle_client(websocket, path=None):  # ← Make path optional
+        async def handle_client(websocket, path=None):
+            """Handle WebSocket client connections with proper shutdown checking"""
+            # Check if server is still running before accepting connection
+            if not self.is_running:
+                try:
+                    await websocket.close()
+                except:
+                    pass
+                return
+
             print(f"🔌 WebSocket client connected from {websocket.remote_address}")
             self.websocket_clients.add(websocket)
             try:
@@ -377,28 +418,3 @@ class LivePreviewServer:
 
         if disconnected_clients:
             print(f"🔌 Removed {len(disconnected_clients)} disconnected clients")
-
-    async def _cleanup_websockets(self):
-        """Async method to properly close all WebSocket connections"""
-        if not self.websocket_clients:
-            return
-
-        # Send goodbye message and close all connections
-        tasks = []
-        for client in self.websocket_clients.copy():
-            try:
-                # Send goodbye message
-                await client.send(json.dumps({
-                    'type': 'server_shutdown',
-                    'timestamp': time.time()
-                }))
-                # Close the connection
-                tasks.append(client.close())
-            except Exception:
-                pass  # Client might already be disconnected
-
-        # Wait for all connections to close
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-
-        self.websocket_clients.clear()
