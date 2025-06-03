@@ -821,4 +821,156 @@ body {
     .enhanced-media-module ol {
         font-size: 0.95rem;
     }
+
+    /* Enhanced Table Module Styles - Add to kodiak.css and other theme files */
+
+    /* Main enhanced table module container */
+    .enhanced-table-module {
+        margin: 1.5rem 0;
+    }
+
+    .enhanced-table-module h3 {
+        font-family: Arial, sans-serif;
+        color: var(--kodiak-brown, #4A3828);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin: 0 0 1.5rem 0;
+        font-weight: bold;
+    }
+
+    /* Content sections within table module */
+    .enhanced-table-module .content-section {
+        margin: 1.5rem 0;
+        color: var(--kodiak-brown, #4A3828);
+    }
+
+    .enhanced-table-module .content-section p {
+        margin: 0.5rem 0;
+        line-height: 1.6;
+    }
+
+    /* Bullet list styles in content sections */
+    .enhanced-table-module .content-section ul {
+        margin: 0.5rem 0;
+        padding-left: 1.5rem;
+    }
+
+    .enhanced-table-module .content-section ul li {
+        margin: 0.3rem 0;
+        list-style-type: none;
+        position: relative;
+    }
+
+    .enhanced-table-module .content-section ul li::before {
+        content: "•";
+        position: absolute;
+        left: -1.2rem;
+        color: var(--kodiak-red, #B22234);
+        font-weight: bold;
+    }
+
+    /* Numbered list styles in content sections */
+    .enhanced-table-module .content-section ol {
+        margin: 0.5rem 0;
+        padding-left: 1.8rem;
+        counter-reset: item;
+    }
+
+    .enhanced-table-module .content-section ol li {
+        margin: 0.3rem 0;
+        list-style-type: none;
+        position: relative;
+        counter-increment: item;
+    }
+
+    .enhanced-table-module .content-section ol li::before {
+        content: counter(item) ".";
+        position: absolute;
+        left: -1.8rem;
+        color: var(--kodiak-red, #B22234);
+        font-weight: bold;
+        min-width: 1.2rem;
+    }
+
+    /* Bold text within content sections */
+    .enhanced-table-module .content-section strong {
+        font-weight: bold;
+        color: var(--kodiak-dark-brown, #2A1810);
+    }
+
+    /* Table sections */
+    .enhanced-table-module .table-section {
+        margin: 2rem 0;
+    }
+
+    .enhanced-table-module .table-section h4 {
+        font-family: Arial, sans-serif;
+        color: var(--kodiak-brown, #4A3828);
+        margin: 0 0 1rem 0;
+        font-size: 1.1rem;
+        font-weight: bold;
+    }
+
+    /* Table container within sections */
+    .enhanced-table-module .table-container {
+        width: 100%;
+        overflow-x: auto;
+        margin: 1rem 0;
+    }
+
+    /* Spacing between sections */
+    .enhanced-table-module .content-section + .table-section {
+        margin-top: 2rem;
+    }
+
+    .enhanced-table-module .table-section + .content-section {
+        margin-top: 2rem;
+    }
+
+    .enhanced-table-module .table-section + .table-section {
+        margin-top: 2.5rem;
+    }
+
+    /* First and last section spacing */
+    .enhanced-table-module > .content-section:first-child,
+    .enhanced-table-module > .table-section:first-child {
+        margin-top: 0;
+    }
+
+    .enhanced-table-module > .content-section:last-child,
+    .enhanced-table-module > .table-section:last-child {
+        margin-bottom: 0;
+    }
+
+    /* For step cards containing enhanced table modules */
+    .step-card .enhanced-table-module {
+        margin: 0;
+    }
+
+    .step-card .enhanced-table-module h3 {
+        margin-top: 0;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .enhanced-table-module {
+            margin: 1rem 0;
+        }
+
+        .enhanced-table-module h3 {
+            font-size: 1.1rem;
+        }
+
+        .enhanced-table-module .content-section,
+        .enhanced-table-module .table-section {
+            margin: 1rem 0;
+        }
+
+        .enhanced-table-module .content-section p,
+        .enhanced-table-module .content-section ul,
+        .enhanced-table-module .content-section ol {
+            font-size: 0.95rem;
+        }
+    }
+
 }
