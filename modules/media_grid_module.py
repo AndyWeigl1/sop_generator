@@ -2,7 +2,7 @@
 from modules.base_module import Module
 from typing import Dict, Any, List
 import os
-import re
+from utils.text_formatter import TextFormatter  # NEW IMPORT
 
 
 class MediaGridModule(Module):
@@ -57,71 +57,12 @@ class MediaGridModule(Module):
         # If it's already a relative path, use as-is
         return cleaned_path
 
-    def _format_text_content(self, text: str) -> str:
-        """Format text content with bullets, numbers, and bold"""
-        if not text:
-            return ''
-
-        lines = text.split('\n')
-        formatted_lines = []
-
-        for line in lines:
-            # Process bold text
-            line = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', line)
-
-            # Process bullet points
-            if line.strip().startswith('• '):
-                line = f'<li>{line.strip()[2:]}</li>'
-                # Check if previous line was also a bullet
-                if formatted_lines and formatted_lines[-1].endswith('</li>'):
-                    # Continue the list
-                    pass
-                else:
-                    # Start a new list
-                    formatted_lines.append('<ul>')
-            elif formatted_lines and formatted_lines[-1].endswith('</li>') and not line.strip().startswith('• '):
-                # End the bullet list
-                formatted_lines.append('</ul>')
-
-            # Process numbered lists
-            elif re.match(r'^\d+\.\s', line.strip()):
-                # Extract the list item content
-                content = re.sub(r'^\d+\.\s', '', line.strip())
-                line = f'<li>{content}</li>'
-                # Check if previous line was also a numbered item
-                if formatted_lines and formatted_lines[-1].endswith('</li>') and not '<ul>' in formatted_lines[-2]:
-                    # Continue the list
-                    pass
-                else:
-                    # Start a new list
-                    formatted_lines.append('<ol>')
-            elif formatted_lines and formatted_lines[-1].endswith('</li>') and not re.match(r'^\d+\.\s', line.strip()):
-                # End the numbered list
-                if '<ol>' in str(formatted_lines[-2:]):
-                    formatted_lines.append('</ol>')
-
-            # Regular paragraph
-            if not line.startswith('<li>'):
-                if line.strip():
-                    formatted_lines.append(f'<p>{line}</p>')
-            else:
-                formatted_lines.append(line)
-
-        # Close any open lists
-        if formatted_lines and formatted_lines[-1].endswith('</li>'):
-            if '<ul>' in str(formatted_lines):
-                formatted_lines.append('</ul>')
-            elif '<ol>' in str(formatted_lines):
-                formatted_lines.append('</ol>')
-
-        return '\n'.join(formatted_lines)
-
     def render_to_html(self) -> str:
         """Generate HTML for enhanced media grid"""
-        # Content before grid
+        # Content before grid - USING TextFormatter NOW
         content_before_html = ''
         if self.content_data.get('content_before'):
-            formatted_content = self._format_text_content(self.content_data['content_before'])
+            formatted_content = TextFormatter.format_text_content(self.content_data['content_before'])
             content_before_html = f'''
             <div class="media-content-before">
                 {formatted_content}
@@ -136,7 +77,6 @@ class MediaGridModule(Module):
         grid_class = f'media-grid {self.content_data["layout"]}'
         gap_class = f'gap-{self.content_data.get("gap", "medium")}'
 
-        # Generate media items
         # Generate media items
         items_html = ''
         for i, item in enumerate(self.content_data.get('items', [])):
@@ -187,10 +127,10 @@ class MediaGridModule(Module):
                 {caption_html}
             </div>'''
 
-        # Content after grid
+        # Content after grid - USING TextFormatter NOW
         content_after_html = ''
         if self.content_data.get('content_after'):
-            formatted_content = self._format_text_content(self.content_data['content_after'])
+            formatted_content = TextFormatter.format_text_content(self.content_data['content_after'])
             content_after_html = f'''
             <div class="media-content-after">
                 {formatted_content}

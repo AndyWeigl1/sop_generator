@@ -1,8 +1,8 @@
 # modules/issue_card_module.py
 from modules.base_module import Module
 from typing import Dict, Any, List
-import re
 import os
+from utils.text_formatter import TextFormatter  # NEW IMPORT
 
 
 class IssueCardModule(Module):
@@ -59,66 +59,6 @@ class IssueCardModule(Module):
             return f'Assets/{filename}'
 
         return cleaned_path
-
-    def _format_text_content(self, text: str) -> str:
-        """Format text content with bullets, numbers, and bold"""
-        if not text:
-            return ''
-
-        lines = text.split('\n')
-        formatted_lines = []
-        in_list = False
-        list_type = None
-
-        for line in lines:
-            stripped_line = line.strip()
-
-            if not stripped_line:
-                # Empty line - close any open lists
-                if in_list:
-                    formatted_lines.append(f'</{list_type}>')
-                    in_list = False
-                    list_type = None
-                formatted_lines.append('')
-                continue
-
-            # Process bold text
-            formatted_line = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', stripped_line)
-
-            # Check for bullet points
-            if formatted_line.startswith('• '):
-                if not in_list or list_type != 'ul':
-                    if in_list:
-                        formatted_lines.append(f'</{list_type}>')
-                    formatted_lines.append('<ul>')
-                    in_list = True
-                    list_type = 'ul'
-                formatted_lines.append(f'<li>{formatted_line[2:]}</li>')
-
-            # Check for numbered items
-            elif re.match(r'^\d+\.\s', formatted_line):
-                if not in_list or list_type != 'ol':
-                    if in_list:
-                        formatted_lines.append(f'</{list_type}>')
-                    formatted_lines.append('<ol>')
-                    in_list = True
-                    list_type = 'ol'
-                content = re.sub(r'^\d+\.\s', '', formatted_line)
-                formatted_lines.append(f'<li>{content}</li>')
-
-            else:
-                # Regular paragraph
-                if in_list:
-                    formatted_lines.append(f'</{list_type}>')
-                    in_list = False
-                    list_type = None
-                formatted_lines.append(f'<p>{formatted_line}</p>')
-
-        # Close any remaining open list
-        if in_list:
-            formatted_lines.append(f'</{list_type}>')
-
-        return '\n'.join(formatted_lines)
 
     def _render_media_container(self, media_type: str, source: str, caption: str,
                                 alt_text: str, header: str, max_width: str = '545px') -> str:
@@ -233,10 +173,10 @@ class IssueCardModule(Module):
 
         title_html = f'<h4>{icon_html}{self.content_data["issue_title"]}</h4>'
 
-        # Issue description before media
+        # Issue description before media - USING TextFormatter NOW
         description_before = ''
         if self.content_data.get('issue_description_before'):
-            formatted_content = self._format_text_content(self.content_data['issue_description_before'])
+            formatted_content = TextFormatter.format_text_content(self.content_data['issue_description_before'])
             description_before = formatted_content
 
         # Issue media
@@ -251,15 +191,15 @@ class IssueCardModule(Module):
                 self.content_data.get('issue_media_max_width', '545px')
             )
 
-        # Issue description after media
+        # Issue description after media - USING TextFormatter NOW
         description_after = ''
         if self.content_data.get('issue_description_after'):
-            formatted_content = self._format_text_content(self.content_data['issue_description_after'])
+            formatted_content = TextFormatter.format_text_content(self.content_data['issue_description_after'])
             description_after = formatted_content
 
-        # Solution section
+        # Solution section - USING TextFormatter NOW
         solution_title = self.content_data.get('solution_title', 'Solution:')
-        solution_content = self._format_text_content(self.content_data.get('solution_content', ''))
+        solution_content = TextFormatter.format_text_content(self.content_data.get('solution_content', ''))
         solution_media = self._render_solution_media()
 
         solution_html = f'''

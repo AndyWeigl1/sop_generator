@@ -2,7 +2,7 @@
 from modules.base_module import Module
 from typing import Dict, Any, List
 import json
-import re
+from utils.text_formatter import TextFormatter  # NEW IMPORT
 
 
 class TableModule(Module):
@@ -33,66 +33,6 @@ class TableModule(Module):
                 }
             ]
         }
-
-    def _format_text_content(self, text: str) -> str:
-        """Format text content with bullets, numbers, and bold (copied from text_module)"""
-        if not text:
-            return ''
-
-        lines = text.split('\n')
-        formatted_lines = []
-        in_list = False
-        list_type = None
-
-        for line in lines:
-            stripped_line = line.strip()
-
-            if not stripped_line:
-                # Empty line - close any open lists
-                if in_list:
-                    formatted_lines.append(f'</{list_type}>')
-                    in_list = False
-                    list_type = None
-                formatted_lines.append('')
-                continue
-
-            # Process bold text
-            formatted_line = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', stripped_line)
-
-            # Check for bullet points
-            if formatted_line.startswith('• '):
-                if not in_list or list_type != 'ul':
-                    if in_list:
-                        formatted_lines.append(f'</{list_type}>')
-                    formatted_lines.append('<ul>')
-                    in_list = True
-                    list_type = 'ul'
-                formatted_lines.append(f'<li>{formatted_line[2:]}</li>')
-
-            # Check for numbered items
-            elif re.match(r'^\d+\.\s', formatted_line):
-                if not in_list or list_type != 'ol':
-                    if in_list:
-                        formatted_lines.append(f'</{list_type}>')
-                    formatted_lines.append('<ol>')
-                    in_list = True
-                    list_type = 'ol'
-                content = re.sub(r'^\d+\.\s', '', formatted_line)
-                formatted_lines.append(f'<li>{content}</li>')
-
-            else:
-                # Regular paragraph
-                if in_list:
-                    formatted_lines.append(f'</{list_type}>')
-                    in_list = False
-                    list_type = None
-                formatted_lines.append(f'<p>{formatted_line}</p>')
-
-        # Close any remaining open list
-        if in_list:
-            formatted_lines.append(f'</{list_type}>')
-
-        return '\n'.join(formatted_lines)
 
     def _render_table_section(self, section: Dict[str, Any]) -> str:
         """Render a single table section"""
@@ -142,7 +82,8 @@ class TableModule(Module):
         if not content:
             return ''
 
-        formatted_content = self._format_text_content(content)
+        # USING TextFormatter NOW
+        formatted_content = TextFormatter.format_text_content(content)
 
         return f'''
         <div class="content-section">
