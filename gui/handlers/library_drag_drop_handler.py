@@ -1,20 +1,9 @@
 # gui/handlers/library_drag_drop_handler.py
-"""
-Library Drag & Drop Handler
-
-Handles all drag and drop operations for modules being dragged from the library.
-This includes:
-- Setting up canvas as drop zone for library modules
-- Highlighting drop zones during library drags
-- Finding appropriate drop targets for library modules
-- Executing library-to-canvas/tab drop operations
-- Coordinating with main_window library drag logic
-- Managing library drop visual feedback
-"""
 
 import customtkinter as ctk
 from typing import Optional, TYPE_CHECKING
 import tkinter as tk
+from gui.utils.widget_safety import safe_widget_exists, is_child_of
 
 if TYPE_CHECKING:
     from gui.canvas_panel import CanvasPanel
@@ -122,7 +111,7 @@ class LibraryDragDropHandler:
             widget_under_cursor = self.app.root.winfo_containing(x, y)
 
             # Clear previous library drop highlight
-            if self.library_drop_highlight and self._safe_widget_exists(self.library_drop_highlight):
+            if self.library_drop_highlight and safe_widget_exists(self.library_drop_highlight):
                 try:
                     if hasattr(self.library_drop_highlight, '_original_library_color'):
                         self.library_drop_highlight.configure(
@@ -139,7 +128,7 @@ class LibraryDragDropHandler:
             # Find the appropriate drop zone
             drop_zone = self.find_library_drop_zone(widget_under_cursor)
 
-            if drop_zone and self._safe_widget_exists(drop_zone):
+            if drop_zone and safe_widget_exists(drop_zone):
                 # Store original color and highlight
                 if not hasattr(drop_zone, '_original_library_color'):
                     try:
@@ -166,7 +155,7 @@ class LibraryDragDropHandler:
         current = widget
 
         while current:
-            if not self._safe_widget_exists(current):
+            if not safe_widget_exists(current):
                 try:
                     current = current.master
                     continue
@@ -184,9 +173,9 @@ class LibraryDragDropHandler:
             # Check if this is a tab content container
             for tab_id, tab_containers in self.canvas_panel.tab_widgets.items():
                 for tab_name, container in tab_containers.items():
-                    if not self._safe_widget_exists(container):
+                    if not safe_widget_exists(container):
                         continue
-                    if current == container or self._is_child_of(current, container):
+                    if current == container or is_child_of(current, container):
                         # Add drop zone info if not present
                         if not hasattr(current, '_drop_zone_info'):
                             # Find the tab module
@@ -218,8 +207,8 @@ class LibraryDragDropHandler:
             # If no specific drop zone found, check if we're generally over the canvas
             if (drop_target == self.canvas_panel.modules_frame or
                     drop_target == self.canvas_panel.parent or
-                    self._is_child_of(drop_target, self.canvas_panel.modules_frame) or
-                    self._is_child_of(drop_target, self.canvas_panel.parent)):
+                    is_child_of(drop_target, self.canvas_panel.modules_frame) or
+                    is_child_of(drop_target, self.canvas_panel.parent)):
                 # We're over the canvas area, so add to main canvas
                 self.app.selected_tab_context = None  # Clear tab context
                 self.app.add_module_to_canvas(module_type)
@@ -246,7 +235,7 @@ class LibraryDragDropHandler:
 
     def clear_library_drop_highlight(self):
         """Clear library drop highlighting"""
-        if self.library_drop_highlight and self._safe_widget_exists(self.library_drop_highlight):
+        if self.library_drop_highlight and safe_widget_exists(self.library_drop_highlight):
             try:
                 if hasattr(self.library_drop_highlight, '_original_library_color'):
                     original_color = self.library_drop_highlight._original_library_color
@@ -269,31 +258,3 @@ class LibraryDragDropHandler:
     def cleanup_on_canvas_clear(self):
         """Clean up library drag state when canvas is cleared"""
         self.clear_library_drop_highlight()
-
-    # Utility methods (shared patterns from canvas_panel)
-    def _safe_widget_exists(self, widget):
-        """Safely check if a widget exists and hasn't been destroyed"""
-        if widget is None:
-            return False
-        if hasattr(self.canvas_panel, 'widgets_being_destroyed'):
-            if id(widget) in self.canvas_panel.widgets_being_destroyed:
-                return False
-        try:
-            return widget.winfo_exists()
-        except tk.TclError:
-            return False
-
-    def _is_child_of(self, child_widget, parent_widget) -> bool:
-        """Check if child_widget is a descendant of parent_widget"""
-        if not self._safe_widget_exists(child_widget) or not self._safe_widget_exists(parent_widget):
-            return False
-
-        current = child_widget
-        while current:
-            if current == parent_widget:
-                return True
-            try:
-                current = current.master
-            except (tk.TclError, AttributeError):
-                break
-        return False
