@@ -1,19 +1,9 @@
 # gui/handlers/canvas_drag_drop_handler.py
-"""
-Canvas Drag & Drop Handler
-
-Handles all drag and drop operations for existing modules on the canvas.
-This includes:
-- Initiating drags from module widgets
-- Creating and managing drag previews
-- Highlighting valid drop zones
-- Executing drop operations (module reordering, tab-to-canvas, canvas-to-tab)
-- Cleaning up drag state
-"""
 
 import customtkinter as ctk
 from typing import Optional, Dict, Any, Tuple, TYPE_CHECKING
 import tkinter as tk
+from gui.utils.widget_safety import safe_widget_exists, is_child_of
 
 if TYPE_CHECKING:
     from gui.canvas_panel import CanvasPanel
@@ -22,7 +12,6 @@ if TYPE_CHECKING:
 
 
 class CanvasDragDropHandler:
-    """Handles drag and drop operations for existing modules on the canvas"""
 
     def __init__(self, canvas_panel: 'CanvasPanel', app_instance):
         self.canvas_panel = canvas_panel
@@ -40,14 +29,14 @@ class CanvasDragDropHandler:
 
         # Get the drag handle
         drag_handle = getattr(frame, '_drag_handle', None)
-        if not drag_handle or not self._safe_widget_exists(drag_handle):
+        if not drag_handle or not safe_widget_exists(drag_handle):
             print(f"Warning: No valid drag handle found for module {module.id}")
             return
 
         def start_drag(event):
             if (self.canvas_panel.preview_mode or
-                    not self._safe_widget_exists(frame) or
-                    not self._safe_widget_exists(drag_handle)):
+                    not safe_widget_exists(frame) or
+                    not safe_widget_exists(drag_handle)):
                 return
 
             self.is_dragging = True
@@ -71,14 +60,14 @@ class CanvasDragDropHandler:
                 return
 
             # Make frame semi-transparent during drag
-            if self._safe_widget_exists(frame):
+            if safe_widget_exists(frame):
                 try:
                     frame.configure(fg_color=("gray25", "gray25"))
                 except tk.TclError:
                     pass
 
             # Change cursor
-            if self._safe_widget_exists(drag_handle):
+            if safe_widget_exists(drag_handle):
                 try:
                     drag_handle.configure(cursor="hand2")
                 except tk.TclError:
@@ -89,7 +78,7 @@ class CanvasDragDropHandler:
                 return
 
             # Update drag preview position
-            if self.drag_preview and self._safe_widget_exists(self.drag_preview):
+            if self.drag_preview and safe_widget_exists(self.drag_preview):
                 try:
                     self.drag_preview.geometry(f"200x40+{event.x_root + 10}+{event.y_root + 10}")
                 except Exception:
@@ -117,21 +106,21 @@ class CanvasDragDropHandler:
             self._cleanup_drag()
 
         # Bind specifically to the drag handle only with safety checks
-        if self._safe_widget_exists(drag_handle):
+        if safe_widget_exists(drag_handle):
             try:
                 drag_handle.bind('<Button-1>', start_drag)
                 drag_handle.configure(cursor="hand2")
 
                 # Add hover effect to make it clear it's draggable
                 def on_enter(event):
-                    if not self.is_dragging and self._safe_widget_exists(drag_handle):
+                    if not self.is_dragging and safe_widget_exists(drag_handle):
                         try:
                             drag_handle.configure(fg_color="gray40")
                         except tk.TclError:
                             pass
 
                 def on_leave(event):
-                    if not self.is_dragging and self._safe_widget_exists(drag_handle):
+                    if not self.is_dragging and safe_widget_exists(drag_handle):
                         try:
                             drag_handle.configure(fg_color="gray30")
                         except tk.TclError:
@@ -165,7 +154,7 @@ class CanvasDragDropHandler:
     def _update_drop_zone_highlight(self, widget_under_cursor):
         """Update visual feedback for drop zones"""
         # Clear previous highlight
-        if self.drop_zone_highlight and self._safe_widget_exists(self.drop_zone_highlight):
+        if self.drop_zone_highlight and safe_widget_exists(self.drop_zone_highlight):
             try:
                 self.drop_zone_highlight.configure(fg_color=self.drop_zone_highlight._original_color)
             except (tk.TclError, AttributeError):
@@ -175,7 +164,7 @@ class CanvasDragDropHandler:
         # Find drop zone
         drop_zone = self._find_drop_zone(widget_under_cursor)
 
-        if drop_zone and self._safe_widget_exists(drop_zone):
+        if drop_zone and safe_widget_exists(drop_zone):
             # Store original color and highlight
             if not hasattr(drop_zone, '_original_color'):
                 try:
@@ -195,7 +184,7 @@ class CanvasDragDropHandler:
 
         while current:
             # Check if widget still exists
-            if not self._safe_widget_exists(current):
+            if not safe_widget_exists(current):
                 try:
                     current = current.master
                     continue
@@ -214,9 +203,9 @@ class CanvasDragDropHandler:
             if isinstance(current, (ctk.CTkFrame, ctk.CTkScrollableFrame)):
                 for tab_id, tab_containers in self.canvas_panel.tab_widgets.items():
                     for tab_name, container in tab_containers.items():
-                        if not self._safe_widget_exists(container):
+                        if not safe_widget_exists(container):
                             continue
-                        if current == container or self._is_child_of(current, container):
+                        if current == container or is_child_of(current, container):
                             # Add drop zone info if not present
                             if not hasattr(current, '_drop_zone_info'):
                                 # Find the tab module
@@ -318,13 +307,13 @@ class CanvasDragDropHandler:
 
         if self.drag_preview:
             try:
-                if self._safe_widget_exists(self.drag_preview):
+                if safe_widget_exists(self.drag_preview):
                     self.drag_preview.destroy()
             except:
                 pass
             self.drag_preview = None
 
-        if self.drop_zone_highlight and self._safe_widget_exists(self.drop_zone_highlight):
+        if self.drop_zone_highlight and safe_widget_exists(self.drop_zone_highlight):
             try:
                 if hasattr(self.drop_zone_highlight, '_original_color'):
                     self.drop_zone_highlight.configure(fg_color=self.drop_zone_highlight._original_color)
@@ -337,7 +326,7 @@ class CanvasDragDropHandler:
         if self.drag_data and self.drag_data.get('source_widget'):
             # Restore original appearance
             source_widget = self.drag_data['source_widget']
-            if self._safe_widget_exists(source_widget):
+            if safe_widget_exists(source_widget):
                 try:
                     # Determine if it's a top-level or nested module
                     if hasattr(source_widget, '_parent_tab') and source_widget._parent_tab:
@@ -360,31 +349,3 @@ class CanvasDragDropHandler:
         """Clean up drag state when canvas is cleared"""
         if self.is_dragging:
             self._cleanup_drag()
-
-    # Utility methods (shared with canvas_panel)
-    def _safe_widget_exists(self, widget):
-        """Safely check if a widget exists and hasn't been destroyed"""
-        if widget is None:
-            return False
-        if hasattr(self.canvas_panel, 'widgets_being_destroyed'):
-            if id(widget) in self.canvas_panel.widgets_being_destroyed:
-                return False
-        try:
-            return widget.winfo_exists()
-        except tk.TclError:
-            return False
-
-    def _is_child_of(self, child_widget, parent_widget) -> bool:
-        """Check if child_widget is a descendant of parent_widget"""
-        if not self._safe_widget_exists(child_widget) or not self._safe_widget_exists(parent_widget):
-            return False
-
-        current = child_widget
-        while current:
-            if current == parent_widget:
-                return True
-            try:
-                current = current.master
-            except (tk.TclError, AttributeError):
-                break
-        return False
